@@ -1,0 +1,392 @@
+---
+output:
+  pdf_document:
+    highlight: default
+urlcolor: blue
+geometry:
+- margin=1in
+- paperheight=6.5in
+- paperwidth=8.5in
+header-includes:
+- \usepackage{fancyhdr}
+- \fancyhead{}
+- \fancyfoot{}
+- \chead{Understanding Data Sets}
+- \lhead{Lecture Notes for 46-921}
+- \rhead{\footnotesize Slide \thepage}
+- \pagestyle{fancy}
+- \parindent=0in
+- \renewcommand{\baselinestretch}{1.3}
+- \usepackage{palatino}
+- \usepackage{color}
+- \usepackage [pagewise, mathlines, displaymath]{lineno}
+- \input defs.tex
+- \parskip 0.15in
+fontsize: 11pt
+#fontfamily: mathpazo
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE, comment="", prompt=TRUE)
+hook1 <- function(x){ gsub("```\n*```r*\n*", "", x) }
+hook2 <- function(x){ gsub("```\n+```\n", "", x) }
+knit_hooks$set(document = hook2)
+#setwd("~/Teaching/MSCF/DScourses/LectureNotes/Part4_UnderstandingDataSet")
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+library(mice)
+```
+
+
+\thispagestyle{fancy}
+\linenumbers
+\Large
+
+\Huge
+{\bf Part 4: Understanding Data Sets}
+\Large
+
+#Summary
+
+\vspace{-.2in}
+This Part presents an example of reading in a data set, and ensuring
+the data is fully understood and properly represented prior to any
+further analysis.
+
+The ability to read in, clean, and understand data sets is a crucial
+skill. Data do not typically come in a convenient form. Careful
+consideration should be given to exploring the data to ensure full
+understanding of the nature of the data set.
+
+
+\newpage
+
+#Example Data Set
+
+\vspace{-.2in}
+First, we will read in a data set that we will use in our
+following examples. 
+
+Visit the website
+
+\small
+https://www.sec.gov/opa/data/market-structure/marketstructuredownloadshtml-by_security.html
+
+\Large
+and download the data from the first quarter of 2017. Create a directory
+for working on these examples, and place this file in that directory.
+
+These data come from the U.S. Securities and Exchange Commission
+respository on market structure. This data set contains daily
+characteristics of a range of market variables over 5000 equities and
+ETFs, accumulated over several exchanges.
+
+
+\newpage
+Be sure that the working directory is correctly set in R.
+
+Now use the `read.table()` function to read in the file:
+
+```{r}
+fulldata = read.table("q1_2017_all.csv", sep=",", 
+                      header=T,quote="")
+```
+This is a "csv" file, i.e., there are "comma-separated-values".
+This leads to the use of `sep=","`. The `header=T` argument
+specifies that the first line of the file gives the variable
+names.
+
+\newpage
+
+__Exercise:__ What happens if you use `read.table()` in the example
+above without `quote=""`?
+
+\answerlines{9}
+
+
+
+
+\newpage
+#Understanding the Variables
+
+\vspace{-.2in}
+Whenever a new data set is encountered, one should fully understand its variables. Specific questions to address for each variable:
+
+1. Describe the information that is stored in this column.
+
+2. What type of variable is it? (Timestamp, ordinal factor, categorical
+factor, ratio scale, other?) Be sure that R represents the variable
+correctly.
+
+3. Are there any missing values? What is the source of the missingness?
+
+4. Are there any extreme/inappropriate values? What is the source of the extreme value?
+
+\newpage
+Look at the variables:
+
+\large
+```{r}
+names(fulldata)
+```
+\Large
+Background on the data can be found in the associated `README` file,
+available on Canvas in the "Data Sets" folder in the "Files" page.
+We will reference portions of it below.
+
+
+\newpage
+
+#Column 1: Date
+
+\vspace{-.2in}
+The first column in `fulldata` is a date stamp for the
+observation. R has special functions for handling dates
+which will prove useful later when working with time
+series.
+
+The `as.Date()` function transforms into the date format:
+
+```{r}
+print(fulldata$Date[1])  # This is Jan. 3, 2017
+fulldata$Date = as.Date(as.character(fulldata$Date),
+                        format="%Y%m%d")
+```
+
+Note that it is necessary to cast the dates as strings,
+and then specify the format of those strings.
+
+\newpage
+__Exercise:__ Explain the use of the `format` argument to `as.Date()`.
+
+\answerlines{10}
+
+
+\newpage
+
+# Columns 2 and 3: Security and Ticker
+
+\vspace{-.2in}
+The variables `Security` and `Ticker` are already appropriately
+treated as \textcolor{red}{factors} by R:
+```{r}
+is.factor(fulldata$Sec) & is.factor(fulldata$Tick)
+```
+We also note that `Security` is either `Stock` or `ETF` (Exchange Traded Fund), and that
+there are over 5,000 equities under consideration:
+```{r}
+levels(fulldata$Security)
+nlevels(fulldata$Ticker)
+```
+
+\newpage
+__Exercise:__ How many of the
+different ticker symbols are ETFs?
+
+```{r,include=FALSE}
+length(unique(fulldata$Ticker[fulldata$Security=="ETF"]))
+length(unique(fulldata$Ticker[fulldata$Security=="Stock"]))
+```
+
+\answerlines{7}
+
+\newpage
+__Exercise:__ Execute the commands below, and discuss what you
+find:
+```{r,eval=FALSE}
+length(unique(fulldata$Date))
+table(table(fulldata$Ticker))
+which.max(table(fulldata$Ticker))
+fulldata[duplicated(fulldata[,c(1,3)]),]
+```
+
+\answerlines{6}
+
+\newpage
+We will remove the duplicated lines using the following
+command:
+```{r}
+fulldata = fulldata[!duplicated(fulldata[,c(1,3)],
+                                fromLast=TRUE),]
+```
+Note that by using `fromLast=TRUE`, we remove the __first__
+of each pair of duplicates.
+
+\newpage
+
+#Columns 4 through 7: Rank Variables
+
+\vspace{-.2in}
+The next four columns provide ranks of the stocks/ETFs
+with respect to key attributes of Market Capitalization,
+Turnover, Volatility, and Price.
+
+In general, we would prefer to start with data in its
+most "raw" format, and one could construct variables such
+as these from that data. Alas, we are often left to work
+with what is avaiable.
+
+\newpage
+
+__Exercise:__ Inspect the output of
+```{r, eval=FALSE}
+table(fulldata$VolatilityRank, fulldata$Security, 
+      fulldata$Date)
+```
+What does this tell us about the structure of these variables?
+Why should we be very careful with these variables?
+
+\answerlines{6}
+
+\newpage
+We will change these into \textcolor{red}{ordered factors} to reflect
+their ordinal nature:
+```{r}
+fulldata$McapRank = 
+  factor(fulldata$McapRank, ordered=TRUE)
+fulldata$TurnRank = 
+  factor(fulldata$TurnRank, ordered=TRUE)
+fulldata$VolatilityRank = 
+  factor(fulldata$VolatilityRank, ordered=TRUE)
+fulldata$PriceRank = 
+  factor(fulldata$PriceRank, ordered=TRUE)
+```
+
+\newpage
+
+#Columns 8 thru 19: The Count Variables
+
+\vspace{-.2in}
+The remaining column in the data set consist of trade and
+share counts of different types.
+
+Note that some of the volume counts are reported in 1000's
+of shares, hence there are non-integer values among the counts.
+
+\newpage
+The `summary()` function is a useful first step in understanding
+the basic properties of the variables. A primary concern is the
+presence of extreme or impossible values.
+
+\vspace{.3in}
+\small
+```{r}
+summary(fulldata[,8:19])
+```
+\Large
+
+\newpage
+__Exercise:__ Do any of these variables take values that would
+seem to be impossible? Can you speculate as to the source of
+these values?
+
+\answerlines{8}
+
+\newpage
+Of course, graphical tools are useful for understanding the
+properties of variables. This topic will be covered more
+fully in the next Part, but here we consider a classic
+approach: the \textcolor{red}{boxplot}:
+
+```{r,fig.width=6, fig.height=5, warning=FALSE,fig.align="center", eval=FALSE}
+boxplot(log(fulldata$Hidden), 
+     ylab="Log Count of Hidden Trades")
+```
+
+The "box" of the plot extends from the 25th to the 75th percentile
+of the data, while the solid line in the middle of the box is at the
+median. The two "arms" extend to the minimum and maximum value,
+__except__ that any value labelled an \textcolor{red}{outlier} is
+plotted separately.
+
+\newpage
+
+```{r,fig.width=6, fig.height=5, warning=FALSE,fig.align="center",echo=FALSE}
+boxplot(log(fulldata$Hidden), 
+     ylab="Log Count of Hidden Trades")
+```
+
+\newpage
+__Exercise:__ Why was the logarithm of the variable utilized in this case?
+What issues did that create?
+
+\answerlines{9}
+
+
+\newpage
+__Exercise:__ Consider the outlier in the previous plot. Is this observation
+also extreme in the other variables? Can you find the source of this behavior?
+
+\answerlines{8}
+
+\newpage
+__Exercise:__ Comment on the output of
+```{r, eval=FALSE}
+apply(fulldata[,8:19],2,which.max)
+```
+
+\answerlines{9}
+
+#Missing Data
+
+\vspace{-.2in}
+Most data sets contain some amount of missing data, for
+many reasons.
+
+R uses the special symbol `NA` to
+represent a missing value.
+
+As a first step, it is important to recognize how your data set
+represents missing values, so that R handles them properly. The
+function `read.table()` has an argument `na.strings` to allow one
+to specify missing values. __Be careful:__ It is not unusual for
+data sets to use numbers such as `-999` to indicate a missing value.
+
+In a `.csv` file such as that we are using here, it is common to
+simply have blank values to indiciate missingness, i.e., there are
+consecutive commas without a value between.
+
+\newpage
+__Exercise:__ Does R appropriately handle cases where a missing value
+is indicated using blank values in a `.csv` file?
+
+\answerlines{9}
+
+\newpage
+
+A useful tool is the function `md.pattern()` that is part of package
+`mice`. This function shows the different "patterns" of missingness
+in the data set, and how often they occur.
+
+Consider the example on the following page, the result of calling
+
+```{r,eval=FALSE}
+md.pattern(data.frame(fulldata), plot=FALSE)
+```
+This shows that there are 325,082 complete cases in the data set.
+There is one case where `VolatilityRank` is missing, and there are
+76 cases where `McapRank`, `TurnRank` and `PriceRank` are missing.
+
+\newpage
+\scriptsize
+```{r,echo=FALSE}
+md.pattern(fulldata, plot=FALSE)
+```
+\Large
+
+\newpage
+__Exercise:__ Inspect the output from
+```{r,eval=FALSE}
+fulldata[!complete.cases(fulldata),]
+```
+What does this say about the cases with missing values?
+
+\answerlines{7}
+
+
+\newpage
+Of course, more sophisticated visualization of the cases with
+missing data would likely provide more information as to the
+source of the missingness. In the next Part we will consider
+such tools.
+
