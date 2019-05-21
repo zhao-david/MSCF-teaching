@@ -1,0 +1,67 @@
+------------------------------------------------------------------------
+Slide 3:
+
+fulldata = read.table("q1_2017_all.csv", sep=",", header=T, quote="")
+
+
+------------------------------------------------------------------------
+Slide 7:
+
+print(fulldata$Date[1])
+fulldata$Date = as.Date(as.character(fulldata$Date), format="%Y%m%d")
+
+
+------------------------------------------------------------------------
+Slide 9:
+
+is.factor(fulldata$Sec) & is.factor(fulldata$Tick)
+levels(fulldata$Security)
+nlevels(fulldata$Ticker)
+
+
+------------------------------------------------------------------------
+Slide 11:
+
+length(unique(fulldata$Date))
+table(table(fulldata$Ticker))
+which.max(table(fulldata$Ticker))
+fulldata[duplicated(fulldata[,c(1,3)]),]
+
+
+------------------------------------------------------------------------
+Slide 12:
+
+fulldata = fulldata[!duplicated(fulldata[,c(1,3)], fromLast=TRUE),]
+
+
+------------------------------------------------------------------------
+Slide 14:
+
+table(fulldata$VolatilityRank, fulldata$Security, fulldata$Date)
+
+
+------------------------------------------------------------------------
+Slide 15:
+
+fulldata$McapRank = factor(fulldata$McapRank, ordered=TRUE)
+fulldata$TurnRank = factor(fulldata$TurnRank, ordered=TRUE)
+fulldata$VolatilityRank = factor(fulldata$VolatilityRank, ordered=TRUE)
+fulldata$PriceRank = factor(fulldata$PriceRank, ordered=TRUE)
+
+
+------------------------------------------------------------------------
+Slide 20:
+
+boxplot(log(fulldata$Hidden), ylab="Log Count of Hidden Trades")
+
+
+------------------------------------------------------------------------
+Slide 24:
+
+apply(fulldata[,8:19],2,which.max)
+
+
+------------------------------------------------------------------------
+Slide 29:
+
+fulldata[!complete.cases(fulldata),]
