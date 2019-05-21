@@ -1,0 +1,203 @@
+------------------------------------------------------------------------
+Slide 2:
+
+
+fulldata = read.table("q1_2017_all.csv", sep=",", header=T, quote="")
+fulldata$Date = as.Date(as.character(fulldata$Date), format="%Y%m%d")
+fulldata = fulldata[!duplicated(fulldata[,c(1,3)], fromLast=TRUE),]
+fulldata$McapRank = factor(fulldata$McapRank, ordered=TRUE)
+fulldata$TurnRank = factor(fulldata$TurnRank, ordered=TRUE)
+fulldata$VolatilityRank = factor(fulldata$VolatilityRank, ordered=TRUE)
+fulldata$PriceRank = factor(fulldata$PriceRank, ordered=TRUE)
+
+
+tickkeep = unique(fulldata$Ticker)[seq(1,
+      length(unique(fulldata$Ticker)),length=100)]
+fulldata = fulldata[fulldata$Ticker %in% tickkeep,]
+
+
+------------------------------------------------------------------------
+Slide 3:
+
+hist(log10(fulldata$Hidden), xlab="Log Number of Hidden Trades")
+
+
+------------------------------------------------------------------------
+Slide 5:
+
+plot(log10(fulldata$Hidden),
+     log10(fulldata$TradesForHidden),
+     xlab="Log Number of Hidden Trades", 
+     ylab="Log Total Number of Trades", pch=".")
+
+
+------------------------------------------------------------------------
+Slide 9:
+
+ggplot(data = fulldata, mapping = aes(x=Hidden, y=Cancels))
+
+baseplot = ggplot(data = fulldata, mapping = 
+               aes(x=Hidden, y=Cancels))
+
+
+------------------------------------------------------------------------
+Slide 10:
+
+baseplot + geom_point()
+
+
+------------------------------------------------------------------------
+Slide 12:
+
+baseplot + 
+  geom_point(size=0.3, color="blue") + 
+  labs(x="Trades on Hidden Orders", 
+      y="Cancelled Orders",
+      title="Cancelled Orders versus Hidden Orders",
+      subtitle="Daily, First Quarter of 2017")
+
+
+------------------------------------------------------------------------
+Slide 15:
+
+baseplot + 
+  geom_point(size=0.3, color="blue") + 
+  labs(x="Trades on Hidden Orders", 
+     y="Cancelled Orders",
+     title="Cancelled Orders versus Hidden Orders",
+     subtitle="Daily, First Quarter of 2017") + 
+  scale_x_log10() + scale_y_log10()
+
+
+------------------------------------------------------------------------
+Slide 17:
+
+baseplot + 
+ geom_point(size=0.3, mapping=aes(color=Security)) + 
+ labs(x="Trades on Hidden Orders", 
+     y="Cancelled Orders",
+     title="Cancelled Orders versus Hidden Orders",
+     subtitle="Daily, First Quarter of 2017") + 
+ scale_x_log10() + scale_y_log10()
+
+
+------------------------------------------------------------------------
+Slide 19:
+
+ggplot(data=fulldata, 
+    mapping=aes(x=Security, fill=Security)) +
+  geom_bar() +
+  labs(x="Security Type", 
+       y="Total Daily Observations")
+
+
+------------------------------------------------------------------------
+Slide 22:
+
+library(dplyr)
+
+fulldataStock = filter(fulldata, Security == "Stock" & !is.na(McapRank))
+
+ggplot(data=fulldataStock, 
+    mapping=aes(x=McapRank, fill=VolatilityRank)) +
+  geom_bar() +
+  labs(x="Market Capitalization Rank", y="Count", 
+    fill="Volatility Rank")
+
+
+------------------------------------------------------------------------
+Slide 24:
+
+ggplot(data=fulldataStock, 
+    mapping=aes(x=McapRank, fill=VolatilityRank)) +
+  geom_bar(position="fill") +
+  labs(x="Market Capitalization Rank", 
+    y="Proportion", fill="Volatility Rank")
+
+
+------------------------------------------------------------------------
+Slide 26:
+
+ggplot(data=fulldataStock, 
+    mapping=aes(x=McapRank, fill=VolatilityRank)) +
+  geom_bar(position="dodge") +
+  labs(x="Market Capitalization Rank", 
+    y="Count", fill="Volatility Rank")
+
+
+------------------------------------------------------------------------
+Slide 29:
+
+ggplot(data=fulldata, mapping=aes(x=Hidden)) + 
+  geom_histogram(binwidth=0.5, fill="blue") + 
+  scale_x_log10() +
+  labs(x="Trades on Hidden Orders", y="Count")
+
+
+------------------------------------------------------------------------
+Slide 30:
+
+ggplot(data=fulldata,
+       mapping=aes(x=Hidden, color=Security)) + 
+  geom_freqpoly(binwidth=0.5, fill="blue") + 
+  scale_x_log10() +
+  labs(x="Trades on Hidden Orders", y="Count")
+
+
+------------------------------------------------------------------------
+Slide 32:
+
+ggplot(data=fulldataStock, 
+       mapping=aes(x=VolatilityRank, y=Hidden)) +
+  geom_boxplot() + scale_y_log10() +
+  labs(y="Trades on Hidden Orders", 
+       x="Volatility Rank")
+
+
+------------------------------------------------------------------------
+Slide 34:
+
+ggplot(data=fulldataStock, 
+        mapping=aes(x=VolatilityRank, y=Hidden)) +
+  geom_violin() + scale_y_log10() +
+  labs(y="Trades on Hidden Orders", 
+       x="Volatility Rank")
+
+
+------------------------------------------------------------------------
+Slide 36:
+
+baseplot + 
+ geom_point(size=0.3, mapping=aes(color=Security)) + 
+ labs(x="Trades on Hidden Orders", 
+     y="Cancelled Orders",
+     title="Cancelled Orders versus Hidden Orders",
+     subtitle="Daily, First Quarter of 2017") + 
+ scale_x_log10() + scale_y_log10() +
+ facet_grid(.~factor(months(Date),
+      levels=c("January","February","March")))
+
+
+------------------------------------------------------------------------
+Slide 39:
+
+baseplot + 
+ geom_point(size=0.3, color="red") + 
+ labs(x="Trades on Hidden Orders", 
+     y="Cancelled Orders",
+     title="Cancelled Orders versus Hidden Orders",
+     subtitle="Daily, First Quarter of 2017") + 
+ scale_x_log10() + scale_y_log10() +
+ facet_grid(Security~factor(months(Date),
+      levels=c("January","February","March")))
+
+
+------------------------------------------------------------------------
+Slide 41:
+
+ggplot(data=filter(fulldata,Ticker=="AMD"), 
+       mapping=aes(x=Date,y=Hidden)) +
+  geom_line(color="blue") +
+  labs(x="Date", y="Trades on Hidden Orders", 
+     title="Change in Hidden Orders over Time",
+     subtitle="AMD, daily, first quarter of 2017")

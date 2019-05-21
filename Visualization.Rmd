@@ -1,0 +1,469 @@
+---
+output:
+  pdf_document:
+    highlight: default
+urlcolor: blue
+geometry:
+- margin=1in
+- paperheight=6.5in
+- paperwidth=8.5in
+header-includes:
+- \usepackage{fancyhdr}
+- \fancyhead{}
+- \fancyfoot{}
+- \chead{Visualization}
+- \lhead{Lecture Notes for 46-921}
+- \rhead{\footnotesize Slide \thepage}
+- \pagestyle{fancy}
+- \parindent=0in
+- \renewcommand{\baselinestretch}{1.3}
+- \usepackage{palatino}
+- \usepackage{color}
+- \usepackage [pagewise, mathlines, displaymath]{lineno}
+- \input defs.tex
+- \parskip 0.15in
+fontsize: 11pt
+#fontfamily: mathpazo
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE, comment="", prompt=TRUE)
+hook1 <- function(x){ gsub("```\n*```r*\n*", "", x) }
+hook2 <- function(x){ gsub("```\n+```\n", "", x) }
+knit_hooks$set(document = hook2)
+setwd("~/Teaching/MSCF/DScourses/LectureNotes/Part5_Visualization")
+```
+
+
+\thispagestyle{fancy}
+\linenumbers
+\Large
+
+\Huge
+{\bf Part 5: Visualization}
+\Large
+
+#Summary
+
+\vspace{-.2in}
+This Part covers tools for visualizing data in R.
+
+Powerful visualization techniques are critical to discovering and
+understanding the relationships between variables.
+
+
+\newpage
+
+#Example Data Set
+
+\vspace{-.2in}
+First, we will revisit the data set we considered in the previous
+Part, and the steps needed to properly format the data:
+
+\small
+```{r}
+fulldata = read.table("q1_2017_all.csv", sep=",", header=T, quote="")
+fulldata$Date = as.Date(as.character(fulldata$Date), format="%Y%m%d")
+fulldata = fulldata[!duplicated(fulldata[,c(1,3)], fromLast=TRUE),]
+fulldata$McapRank = factor(fulldata$McapRank, ordered=TRUE)
+fulldata$TurnRank = factor(fulldata$TurnRank, ordered=TRUE)
+fulldata$VolatilityRank = factor(fulldata$VolatilityRank, ordered=TRUE)
+fulldata$PriceRank = factor(fulldata$PriceRank, ordered=TRUE)
+```
+\Large
+
+\vspace{-.1in}
+The entire data set is a bit large to work with conveniently, so
+we are going to restrict consideration to 1000 equities:
+
+\vspace{-.1in}
+```{r}
+tickkeep = unique(fulldata$Ticker)[seq(1,
+      length(unique(fulldata$Ticker)),length=100)]
+fulldata = fulldata[fulldata$Ticker %in% tickkeep,]
+```
+
+
+\newpage
+# Classic Plotting Functions in R
+
+\vspace{-.2in}
+Prior to moving on the more advanced visualization functions,
+it is important to understand the basic plotting capabilities of R.
+
+We saw the use of `boxplot()` in a previous Part. A similar view of
+the shape of a distribution can be obtained using a \textcolor{red}{histogram},
+formed using the function `hist()`:
+
+```{r,eval=FALSE}
+hist(log10(fulldata$Hidden), 
+     xlab="Log Number of Hidden Trades")
+```
+The title on the plot can be changed using the `main` argument.
+
+The number of bins in the histogram can be altered using the `breaks` argument.
+
+```{r,echo=FALSE,fig.align="center"}
+hist(log10(fulldata$Hidden),  xlab="Log Number of Hidden Trades")
+```
+
+\newpage
+\textcolor{red}{Scatter plots} are ubiquitous, as well. They are created simply
+in R using the `plot()` function:
+
+```{r, fig.align="center", fig.height=5, eval=FALSE}
+plot(log10(fulldata$Hidden),
+     log10(fulldata$TradesForHidden),
+     xlab="Log Number of Hidden Trades", 
+     ylab="Log Total Number of Trades", pch=".")
+```
+The argument `pch` changes the plotting character. In a case such as this,
+with so many dots on the plot, the default plotting character is too large.
+
+Many other properties of the scatter plot can be adjusted using the `par()`
+function. See `help(par)` for more information.
+
+```{r, fig.align="center", fig.height=5, echo=FALSE}
+plot(log10(fulldata$Hidden),
+     log10(fulldata$TradesForHidden),
+     xlab="Log Number of Hidden Trades", 
+     ylab="Log Total Number of Trades", pch=".")
+```
+
+\newpage
+#Introduction to ggplot2
+
+\vspace{-.2in}
+The package `ggplot2` contains a great deal of valuable 
+data visualization tools. This package can be installed,
+along with other useful packages for working with large and
+complex data sets, via the `tidyverse`
+meta-package:
+
+```{r,eval=FALSE}
+install.packages("tidyverse")
+```
+
+The collection of packages in tidyverse comprise ``a collection of
+R packages that share common philosophies and are designed to
+work together." -- tidyverse.org
+
+
+\newpage
+The `ggplot2` package implements a \textcolor{red}{grammar of graphics},
+where plots are created by combining \textcolor{red}{geoms}.
+
+The syntax is a little awkward at first, but this approach yields a
+great deal of flexibility, and a great deal of power in exploring
+features in a data set.
+
+A plot is initialized by using the `ggplot()` function:
+
+```{r,include=FALSE}
+library(ggplot2)
+```
+
+```{r,eval=FALSE}
+ggplot(data = fulldata)
+```
+
+\newpage
+
+To the basic plot, one adds the "aesthetic" via the
+`mapping` option. An aesthetic a generic
+concept for the visual features of a plot. In this case,
+we are specifying that the variable on the horizontal
+axis is `Hidden`, and the variable on the vertical
+axis is `Cancels`:
+
+```{r, eval=FALSE}
+ggplot(data = fulldata, mapping = 
+               aes(x=Hidden, y=Cancels))
+```
+
+We can now add onto this base to create plots with
+complex features. You can, for instance, define
+```{r, eval=FALSE}
+baseplot = ggplot(data = fulldata, mapping = 
+               aes(x=Hidden, y=Cancels))
+```
+and add onto `baseplot` in what follows.
+
+\newpage
+#A Simple Scatter Plot
+
+\vspace{-.2in}
+Consider the following syntax:
+
+```{r, eval=FALSE}
+baseplot + geom_point()
+```
+
+Note how the `geom_point()` function is used to add
+a scatter plot onto the current figure, as stored
+in `baseplot`.
+
+\newpage
+```{r, fig.height=4,fig.width=6,fig.align='center',echo=FALSE}
+baseplot = ggplot(data = fulldata, mapping = 
+               aes(x=Hidden, y=Cancels))
+baseplot + geom_point()
+```
+
+\newpage
+Now we will work to improve the appearance of this plot.
+
+```{r, fig.height=4,fig.width=6,fig.align='center'}
+baseplot + 
+  geom_point(size=0.3, color="blue") + 
+  labs(x="Trades on Hidden Orders", 
+      y="Cancelled Orders",
+      title="Cancelled Orders versus Hidden Orders",
+      subtitle="Daily, First Quarter of 2017")
+```
+
+\newpage
+__Exercise:__ Describe the changes that were made to improve the plot.
+
+\answerlines{8}
+
+\newpage
+Next, we will convert the axes to the log scale:
+
+```{r, fig.height=4,fig.width=6,fig.align='center',warning=FALSE}
+baseplot + 
+  geom_point(size=0.3, color="blue") + 
+  labs(x="Trades on Hidden Orders", 
+     y="Cancelled Orders",
+     title="Cancelled Orders versus Hidden Orders",
+     subtitle="Daily, First Quarter of 2017") + 
+  scale_x_log10() + scale_y_log10()
+```
+
+\newpage
+The `color` argument can be switched to vary with the levels of one
+of the factors.
+
+```{r, fig.height=4,fig.width=7,fig.align='center',warning=FALSE}
+baseplot + 
+ geom_point(size=0.3, mapping=aes(color=Security)) + 
+ labs(x="Trades on Hidden Orders", 
+     y="Cancelled Orders",
+     title="Cancelled Orders versus Hidden Orders",
+     subtitle="Daily, First Quarter of 2017") + 
+ scale_x_log10() + scale_y_log10()
+```
+
+\newpage
+
+#Bar Plots
+
+\vspace{-.2in}
+
+Basic bar charts can be created to inspect the distribution
+of a factor, using the `geom_bar()` function:
+
+```{r, fig.align="center", fig.height=4}
+ggplot(data=fulldata, 
+    mapping=aes(x=Security, fill=Security)) +
+  geom_bar() +
+  labs(x="Security Type", 
+       y="Total Daily Observations")
+```
+
+\newpage
+__Exercise:__ Now that we have seen a few examples, try to explain
+the notion of the "aesthetic."
+
+\answerlines{8}
+
+\newpage
+
+For the next plot, we will restrict to data that do not have missing
+values on `McapRank`, and are of type "Stock":
+
+```{r,include=FALSE}
+library(dplyr)
+```
+
+```{r}
+fulldataStock = filter(fulldata, 
+      Security == "Stock" & !is.na(McapRank))
+```
+
+We will adjust the aesthetic so that the "fill" color
+of the bars corresponds to the level of `VolatilityRank`:
+
+```{r, fig.align="center", fig.height=4}
+ggplot(data=fulldataStock, 
+    mapping=aes(x=McapRank, fill=VolatilityRank)) +
+  geom_bar() +
+  labs(x="Market Capitalization Rank", y="Count", 
+    fill="Volatility Rank")
+```
+
+\newpage
+The bars in the previous plot are not of equal height because of
+the subsampling we did to reduce to 1000 equities.
+
+We can change vertical axis to proportion by setting
+`position="fill"`:
+```{r, fig.align="center", fig.height=4}
+ggplot(data=fulldataStock, 
+    mapping=aes(x=McapRank, fill=VolatilityRank)) +
+  geom_bar(position="fill") +
+  labs(x="Market Capitalization Rank", 
+    y="Proportion", fill="Volatility Rank")
+```
+
+\newpage
+By setting
+`position="dodge"`, the bars are arranged more like a histogram:
+  
+```{r, fig.align="center", fig.height=4}
+ggplot(data=fulldataStock, 
+    mapping=aes(x=McapRank, fill=VolatilityRank)) +
+  geom_bar(position="dodge") +
+  labs(x="Market Capitalization Rank", 
+    y="Count", fill="Volatility Rank")
+```
+
+\newpage
+__Exercise:__ Why would you not want to create a scatter plot to explore
+the relationship between Market Capitalization Rank and Volatility Rank?
+Consider how the function `geom_jitter()` can help in this regard.
+
+\answerlines{8}
+
+```{r, eval=FALSE, echo=FALSE}
+ggplot(data=fulldata[complete.cases(fulldata) & fulldata$Security=="Stock",]) +
+  geom_jitter(mapping=aes(x=McapRank,y=VolatilityRank),width=0.15, height=0.15,size=0.01) +
+  labs(x="Market Capitalization Rank", y="Volatility Rank")
+```
+
+\newpage
+
+#Histograms
+
+\vspace{-.2in}
+The function `geom_histogram()` will create a histogram:
+
+```{r, fig.align="center",fig.height=2.25,fig.width=4, warning=FALSE}
+ggplot(data=fulldata, mapping=aes(x=Hidden)) + 
+  geom_histogram(binwidth=0.5, fill="blue") + 
+  scale_x_log10() +
+  labs(x="Trades on Hidden Orders", y="Count")
+```
+
+\newpage
+Overlapping histograms can be difficult to interpret (try it!).
+An alternative is to create \textcolor{red}{frequency polygons}
+using `geom_freqpoly()`:
+
+```{r, fig.align="center",fig.height=2.0,fig.width=4, warning=FALSE}
+ggplot(data=fulldata,
+       mapping=aes(x=Hidden, color=Security)) + 
+  geom_freqpoly(binwidth=0.5, fill="blue") + 
+  scale_x_log10() +
+  labs(x="Trades on Hidden Orders", y="Count")
+```
+
+\newpage
+__Exercise:__ Both `geom_histogram()` and `geom_freqpoly()` have an argument
+`binwidth`. Discuss the technical and practical effects of varying `binwidth`.
+
+\answerlines{8}
+
+\newpage
+#Boxplots
+
+\vspace{-.2in}
+\textcolor{red}{Side-by-side boxplots} are also useful for comparing the distributions
+of variables over different values of a factor. For example,
+
+```{r, fig.align="center",fig.height=4.0, warning=FALSE}
+ggplot(data=fulldataStock, 
+       mapping=aes(x=VolatilityRank, y=Hidden)) +
+  geom_boxplot() + scale_y_log10() +
+  labs(y="Trades on Hidden Orders", 
+       x="Volatility Rank")
+```
+
+\newpage
+A \textcolor{red}{violin plot} shows the same type of information, with
+a little more detail. The width of a "violins" is greater in areas where
+a greater proportion of the observations lie.
+
+```{r, fig.align="center",fig.height=4.0, warning=FALSE}
+ggplot(data=fulldataStock, 
+        mapping=aes(x=VolatilityRank, y=Hidden)) +
+  geom_violin() + scale_y_log10() +
+  labs(y="Trades on Hidden Orders", 
+       x="Volatility Rank")
+```
+
+
+\newpage
+#Facets
+
+\vspace{-.2in}
+\textcolor{red}{Facets} refer to an arrangment of plots on which
+one or more factors vary. For example, return to our scatter
+plot example above, and use the `facet_grid()` function to break
+up the plots by month:
+
+```{r, fig.height=4,fig.width=7,fig.align='center',warning=FALSE}
+baseplot + 
+ geom_point(size=0.3, mapping=aes(color=Security)) + 
+ labs(x="Trades on Hidden Orders", 
+     y="Cancelled Orders",
+     title="Cancelled Orders versus Hidden Orders",
+     subtitle="Daily, First Quarter of 2017") + 
+ scale_x_log10() + scale_y_log10() +
+ facet_grid(.~factor(months(Date),
+      levels=c("January","February","March")))
+```
+
+\newpage
+__Exercise:__ What happens in the previous example if the command
+```{r,eval=FALSE}
+facet_grid(.~months(Date))
+```
+is used instead? What about if use the following?
+```{r,eval=FALSE}
+facet_grid(months(Date)~.)
+```
+
+\answerlines{6}
+
+
+\newpage
+Two factors can vary:
+```{r, fig.height=5,fig.width=7,fig.align='center',warning=FALSE}
+baseplot + 
+ geom_point(size=0.3, color="red") + 
+ labs(x="Trades on Hidden Orders", 
+     y="Cancelled Orders",
+     title="Cancelled Orders versus Hidden Orders",
+     subtitle="Daily, First Quarter of 2017") + 
+ scale_x_log10() + scale_y_log10() +
+ facet_grid(Security~factor(months(Date),
+      levels=c("January","February","March")))
+```
+\newpage
+#Time Series Plots
+
+\vspace{-.2in}
+We will, of course, be working with a great deal of \textcolor{red}{time
+series data}. The `geom_line()` function is useful:
+
+```{r, fig.height=5,fig.width=7,fig.align='center',warning=FALSE}
+ggplot(data=filter(fulldata,Ticker=="AMD"), 
+       mapping=aes(x=Date,y=Hidden)) +
+  geom_line(color="blue") +
+  labs(x="Date", y="Trades on Hidden Orders", 
+     title="Change in Hidden Orders over Time",
+     subtitle="AMD, daily, first quarter of 2017")
+```
+
