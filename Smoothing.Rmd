@@ -1,0 +1,1134 @@
+---
+output:
+  pdf_document:
+    highlight: default
+urlcolor: blue
+geometry:
+- margin=1in
+- paperheight=6.5in
+- paperwidth=8.5in
+header-includes:
+- \usepackage{fancyhdr}
+- \fancyhead{}
+- \fancyfoot{}
+- \chead{Smoothing}
+- \lhead{Lecture Notes for 46-921}
+- \rhead{\footnotesize Slide \thepage}
+- \pagestyle{fancy}
+- \parindent=0in
+- \renewcommand{\baselinestretch}{1.3}
+- \usepackage{palatino}
+- \usepackage{color}
+- \usepackage [pagewise, mathlines, displaymath]{lineno}
+- \input defs.tex
+- \parskip 0.15in
+fontsize: 11pt
+#fontfamily: mathpazo
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+library(dplyr)
+library(ggplot2)
+library(quantmod)
+library(fANCOVA)
+knitr::opts_chunk$set(echo = TRUE, comment="", prompt=TRUE)
+hook1 <- function(x){ gsub("```\n*```r*\n*", "", x) }
+hook2 <- function(x){ gsub("```\n+```\n", "", x) }
+knit_hooks$set(document = hook2)
+setwd("~/Teaching/MSCF/DScourses/LectureNotes/Part7_Smoothing")
+```
+
+
+\thispagestyle{fancy}
+\linenumbers
+\Large
+
+\Huge
+{\bf Part 7: Smoothing}
+\Large
+
+#Summary
+
+\vspace{-.2in}
+
+
+\textcolor{red}{Smoothing} refers generally to procedures that attempt to
+extract underlying \textcolor{red}{signal} from \textcolor{red}{noise} in
+a \textcolor{red}{nonparametric} manner. 
+
+The term "nonparametric" means the use of a statistical model that does
+not make restrictive assumptions. The data are allowed to "speak for
+themselves" as much as possible.
+
+Here we consider such smoothing procedures as tools for summarizing noisy
+data.
+
+\newpage
+
+#Basics of Density Estimation
+
+\vspace{-.2in}
+
+\textcolor{red}{Nonparametric density estimation} refers to techniques that
+estimate the \textcolor{red}{distribution} for a variable, without assuming
+any \textcolor{red}{parametric} form. Examples of parametric forms include
+the normal distribution, the exponential distribution, etc.
+
+\textcolor{red}{Histograms} are a simple example of a nonparametric density
+estimator. While these are useful, they suffer from limitations, namely the
+arbitrariness of the binning, and discontinuous ("jagged") nature of the estimate of
+a distribution
+that is typically assumed to be smooth. Smooth estimators also have statistical
+efficiency
+advantages over histograms.
+
+\newpage
+The standard nonparametric approach to density estimation is the 
+\textcolor{red}{kernel density estimator}. This estimate is constructed
+by summing a smooth \textcolor{red}{kernel function} centered at each
+of the observed data points.
+
+Formally, we write:
+\[
+\widehat f_{\!h}(x) = \frac{1}{nh} \sum_{i=1}^n K\!\left(\frac{x-x_i}{h}\right)
+\]
+where $K(\cdot)$ is the \textcolor{red}{kernel function} and $h$ is
+the \textcolor{red}{smoothing parameter} or \textcolor{red}{bandwidth}.
+The sample is $x_1, x_2, \ldots, x_n$.
+
+The kernel function is itself a density, almost always taken to be a
+smooth density peaked at zero, and symetric around zero. Three standard
+examples are shown on the next page.
+
+\newpage
+
+```{r,fig.width=7,fig.height=6,fig.align="center",echo=FALSE}
+plot(density(x=0, bw=1, 
+    kernel=c("gaussian")),main="",xlab=expression(x),ylab=expression(K(x)),
+     cex.axis=1.2,cex.lab=1.2,lwd=2)
+points(density(x=0,bw=1,kernel="ep"),lty=2,col=4,lwd=2,type="l")
+points(density(x=0,bw=1,kernel="bi"),lty=4,col=2,lwd=2,type="l")
+legend("topleft",legend=c("Gaussian","Epanechnikov","Biweight"),lwd=2,lty=c(1,2,4),
+       col=c(1,4,2),cex=1.2)
+```
+
+\newpage
+The choice of the kernel is not too influential on the shape of the
+density estimate. The bandwidth $h$ is influential, however.
+
+Larger values of $h$ result in a density estimate that is smoother. Smaller values of $h$ produce an estimate that is "rough" and "wiggly."
+
+As a very simple example to illustrate the concept, imagine my data set consisted of
+three observations: 1.5, 4, and 5. The next three slides illustrate the steps going
+from the raw data to the final estimate. The subsequent slides show the effect of
+varying the bandwidth.
+
+\newpage
+
+```{r, echo=FALSE}
+densdemo = function(x, bw=bw.nrd0(x),detail=3)
+{
+   foo = density(x,bw=bw)
+   holdout = matrix(nrow=length(foo$x),ncol=length(x)+2)
+   holdout[,1] = foo$x
+   holdout[,2] = foo$y
+   for(i in 1:length(x))
+   {
+     holdout[,(i+2)] = dnorm(foo$x,mean=x[i],sd=bw)
+   }
+   holdout = data.frame(holdout)
+   if(detail==3)
+   {
+        plot(holdout$X1,holdout$X2,lwd=2,type="l",col=4,xlab="Data",ylab="Density",cex.axis=1.3,cex.lab=1.3)
+   } else
+   {
+        plot(holdout$X1,holdout$X2,lwd=2,type="n",col=4,xlab="Data",ylab="Density",cex.axis=1.3,cex.lab=1.3)
+   }
+   for(i in 1:length(x))
+   {
+     if(detail>1)
+     {
+        points(holdout$X1,holdout[,(i+2)]/length(x),lwd=2,col=2,lty=2,type="l")
+     }
+     lines(c(x[i],x[i]),c(0,dnorm(x[i],x[i],bw))/length(x),lwd=2,col=1)
+   }
+}
+```
+
+
+The positions of the three observations:
+```{r,echo=FALSE,fig.align="center"}
+x = c(1.5,4,5)
+densdemo(x,1,1)
+```
+
+\newpage
+The gaussian kernel with $h=1$ shown centered
+at each observation:
+```{r,echo=FALSE,fig.align="center"}
+densdemo(x,1,2)
+```
+
+\newpage
+These kernels are summed to create the final estimate:
+```{r,echo=FALSE,fig.align="center"}
+densdemo(x,1,3)
+```
+
+\newpage
+Compare this with the case where $h=2$:
+```{r,echo=FALSE,fig.align="center"}
+densdemo(x,2,3)
+```
+
+\newpage
+And when $h=0.5$:
+```{r,echo=FALSE,fig.align="center"}
+densdemo(x,0.5,3)
+```
+
+\newpage
+Or when $h=0.1$:
+```{r,echo=FALSE,fig.align="center"}
+densdemo(x,0.1,3)
+```
+
+\newpage
+__Exercise:__ What is the relationship between using a Gaussian kernel and
+making an assumption that a sample is drawn from a Gaussian (normal) distribution?
+
+\answerlines{8}
+
+\newpage
+Rigorous ways of choosing $h$ do exist. See Jones, Marron, and Sheather (1996) for an
+overview.
+
+Briefly, the theory is built on the assumption that the
+available sample $x_1, x_2, \ldots, x_n$ are drawn i.i.d. from some population with
+density $f(\cdot)$. The criterion that one seeks to minimize is the \textcolor{red}{mean
+integrated squared error}:
+\[
+   {\rm MISE} = E\left[\int \!\left(\widehat f_{\!h}(x) - f(x)\right)^2 \!dx \right].
+\]
+
+As is often the case, consideration is made of the \textcolor{red}{asymptotic}
+behavior of the criterion as $n$ increases. One can show that the the
+\textcolor{red}{asymptotic mean integrated squared error} is
+\[
+   {\rm AMISE} = \frac{R(K)}{nh} + h^4 R(f'')\left(\frac{1}{2}\!\int \!x^2 K(x) \:dx\right)^2
+\]
+where
+\[
+R(\phi) = \int \phi^2(x) \:dx
+\]
+
+\newpage
+The optimal choice for $h$ can then be shown to be
+\[
+h = \left[
+\frac{R(K)}{nR(f'')\left(x^2K(x)\right)^2}
+\right]^{1/5}
+\]
+
+The \textcolor{red}{Sheather-Jones (S-J)} approach to finding
+the bandwidth is to find the $h$ which solves
+\[
+h = \left[
+\frac{R(K)}{nR(\widehat f_{g(h)}'')\left(x^2K(x)\right)^2}
+\right]^{1/5}
+\]
+where $g(h)$ is some function of $h$ which accounts for the
+fact that the optimal choice of bandwidth for estimating $f''$
+is not the same as the optimal choice for estimating $f$.
+
+\newpage
+The choice of $h$ can also be dictated by less theoretical considerations.
+
+In particular, if the motivation is to achieve a summary of a distribution
+via \textcolor{red}{smoothing} the distribution to a particular \textcolor{red}{scale}.
+
+One could, for example, smooth a distribution using multiple bandwidth
+choices, and then using the resulting smooth estimates as input into a
+model. Formal procedures could then be used to determine how useful each
+"scale" is to the problem at hand, i.e., a prediction challenge.
+
+This idea will be explored through examples later.
+
+\newpage
+
+#Kernel Density Estimation in R
+
+\vspace{-.2in}
+
+The basic function for kernel density estimation in R is `density()`.
+
+The argument `kernel` specifies the kernel function; the
+default is `"gaussian"`.
+
+The bandwidth is provided using the argument `bw`. The user can specify either a number, or specify a method for determining the bandwidth. For example,
+the function `bw="SJ"` calculates the S-J bandwidth.
+
+The argument `adjust` can be useful when attempting to try multiple scales.
+The bandwidth utilized is actually equal to `adjust` times the value of `bw`.
+This makes it easy to fit with, e.g., double the S-J
+bandwidth, half the S-J bandwidth, etc.
+
+\newpage
+
+__Exercise:__
+Try the following code, and discuss the structure of the output
+of `density()`. What happens as the sample size is varied?
+```{r, eval=FALSE}
+x = rnorm(1000)
+densout = density(x, bw="SJ")
+plot(densout)
+curve(dnorm(x), add=T, col="red", lty=2)
+```
+\answerlines{5}
+
+\newpage
+There is a function `geom_density()` as part of `ggplot`. It accepts
+the same
+arguments as does `density()`.
+
+```{r,echo=FALSE}
+load("trainmerged.Robj")
+breaks = c(-Inf,-0.5,-0.05,-0.01,0,0.01,0.05,0.5,Inf)
+trainmerged$logerrorbin = cut(trainmerged$logerror, breaks, 
+      labels=c(1:8),ordered_result=TRUE)
+```
+
+\large
+```{r,warning=FALSE,fig.align="center",fig.height=2.5, fig.width=4}
+ggplot(trainmerged, aes(x=calculatedfinishedsquarefeet)) + 
+   geom_density(bw="SJ", color="red") + 
+   labs(x="Calculated Finished Square Feet") +
+   scale_x_log10()
+```
+\Large
+
+\newpage
+__Exercise:__ How does one interpret the vertical scale "Density" on
+the preceding plot?
+
+\answerlines{8}
+
+\newpage
+
+#Insights from Density Estimates
+
+\vspace{-.2in}
+
+As stated above, a primary motivation for smoothing in general,
+and nonparametric density estimation in particular, is to work
+to separate real features (the "signal") from the uninformative
+randomness (the "noise").
+
+Consider how the next plot presents changes in the distribution
+of the amount of property tax over the different log error bins.
+This builds on our previous Zillow example.
+
+\large
+```{r,warning=FALSE,fig.align="center",fig.height=5, fig.width=7}
+ggplot(trainmerged, aes(x=taxamount, color=logerrorbin)) + 
+   geom_density(bw="SJ") + 
+   labs(x="Tax Amount", color="Log Error Bin") +
+   scale_x_log10()
+```
+\Large
+
+\newpage
+
+__Exercise:__ What conclusion(s) could you draw from the previous plot?
+
+\answerlines{8}
+
+\newpage
+A kernel density estimate is often utilized to determine an
+appropriate "named" parametric distribution, if it exists.
+
+As an example, use package `quantmod` to obtain the daily data
+for Kellogg's (K) from 2010 through 2016:
+
+
+```{r,message=FALSE,warning=FALSE}
+Kellogg = getSymbols("K",
+  from="2010-1-1",to="2016-12-31", auto.assign=F)
+```
+
+Then calculate the log daily returns:
+```{r}
+ldrK = data.frame(dailyReturn(Ad(Kellogg), 
+                                 type="log"))
+```
+The function `Ad()` extracts the "adjusted closing
+price" column from the data set.
+
+\newpage
+Consider the following plot which compares the kernel
+density estimate with the normal distribution:
+
+\large
+```{r, fig.align="center"}
+ggplot(ldrK,aes(x=daily.returns)) + 
+  geom_density(bw="SJ",aes(color="kde")) +
+  stat_function(fun=dnorm, aes(color="normal"),
+      args=list(mean=mean(ldrK$daily.returns),
+                sd=sd(ldrK$daily.returns))) +
+  scale_color_manual(name="",
+              values=c("kde"="red","normal"="blue")) +
+  labs(x="Log Daily Return",title="Data for Kellogg (K)",
+       subtitle="January 2010 through December 2016")
+```
+\Large
+
+\newpage
+The plot is not as informative as one on the log scale:
+
+\large
+```{r, fig.align="center"}
+ggplot(ldrK,aes(x=daily.returns)) + 
+  geom_density(bw="SJ",aes(color="kde")) +
+  stat_function(fun=dnorm, aes(color="normal"),
+      args=list(mean=mean(ldrK$daily.returns),
+                sd=sd(ldrK$daily.returns))) +
+  scale_color_manual(name="",
+              values=c("kde"="red","normal"="blue")) +
+  labs(x="Log Daily Return",title="Data for Kellogg (K)",
+       subtitle="January 2010 through December 2016") +
+  scale_y_log10()
+```
+\Large
+\newpage
+
+__Exercise:__ Comment on the appropriateness of the normal approximation
+to log returns in this case.
+
+\answerlines{8}
+
+\newpage
+
+#Converting to the CDF and Percentiles
+
+\vspace{-.2in}
+Smooth density estimates can be transformed into an
+estimate of the \textcolor{red}{cumulative distribution function (CDF)}
+and its inverse (i.e., percentiles).
+
+A useful function in R to achieve this is `approxfun()`. It takes `x`
+and `y` vectors and returns a function which linearly interpolates
+the given values. Note that the output of `approxfun()` is itself
+a function.
+
+Also, there is a function `integrate()` that will perform
+numerical integration.
+
+\newpage
+Consider the following function `kCDF()`:
+
+\large
+```{r}
+kCDF = function(x, res=100, ...)
+{
+   holddens = density(x,...)
+   interpdens = approxfun(holddens$x, holddens$y, 
+                            yleft=0, yright=0)
+   xseq = seq(min(holddens$x),max(holddens$x),length=res)
+   holdout = numeric(res)
+   for(i in 1:res)
+   {
+      holdout[i] = integrate(interpdens, lower=min(holddens$x),
+                  upper=xseq[i], stop.on.error=FALSE)$value
+   }
+   CDF = approxfun(xseq, holdout, yleft=0, yright=1)
+   invCDF = approxfun(holdout, xseq, yleft=NA, yright=NA)
+   list(CDF=CDF, invCDF=invCDF)
+}
+```
+\Large
+
+\newpage
+__Exercise:__ Discuss what the function `kCDF()` will do.
+
+\answerlines{8}
+
+\newpage
+
+For this example, 
+let's return to the market structure data that we considered
+in Parts 4 and 5:
+\small
+```{r}
+fulldata = read.table("q1_2017_all.csv", sep=",", header=T, quote="")
+fulldata$Date = as.Date(as.character(fulldata$Date), format="%Y%m%d")
+fulldata = fulldata[!duplicated(fulldata[,c(1,3)], fromLast=TRUE),]
+fulldata$McapRank = factor(fulldata$McapRank, ordered=TRUE)
+fulldata$TurnRank = factor(fulldata$TurnRank, ordered=TRUE)
+fulldata$VolatilityRank = factor(fulldata$VolatilityRank, ordered=TRUE)
+fulldata$PriceRank = factor(fulldata$PriceRank, ordered=TRUE)
+```
+
+\Large
+
+
+We will consider the variable `Cancels`. Split this variable up by
+the ticker symbol, and exclude those with fewer than 5 observations:
+
+\large
+```{r}
+cancelbyticker = split(fulldata$Cancels,fulldata$Ticker)
+cancelbyticker = 
+  cancelbyticker[sapply(cancelbyticker,length)>=5]
+```
+\Large
+
+\newpage
+Now, we can construct the estimate of the CDF for the symbols
+using the following:
+
+```{r}
+CDFsbyTicker = lapply(cancelbyticker, kCDF, bw="SJ")
+```
+
+I want to evaluate each of the inverse CDFs at a regular grid of
+probabilities ranging from 0.1 to 0.9:
+
+```{r,eval=FALSE}
+pseq = seq(0.1,0.9, by=0.1)
+
+holdquantiles = matrix(ncol=length(pseq), 
+                       nrow=length(CDFsbyTicker))
+for(i in 1:length(CDFsbyTicker))
+{
+   holdquantiles[i,] = CDFsbyTicker[[i]]$invCDF(pseq)
+}
+```
+
+
+\newpage
+__Exercise:__ What just happened in this previous code? What was the
+point of this?
+
+\answerlines{8}
+
+
+
+\newpage
+
+#Smoothing Relationships
+
+\vspace{-.2in}
+Smoothing techniques are also very commonly applied to situations where
+one variable is naturally thought of as a \textcolor{red}{response}, i.e.,
+a quantity to be predicted, and other variables are considered as \textcolor{red}{predictors}.
+
+The discussion that follows presents an overview of 
+\textcolor{red}{nonparametric} regression.
+The focus is placed on constructing useful \textcolor{red}{summaries}
+that will lead to better understanding of the relationship between the response and the predictor(s).
+
+
+\newpage
+#Example: Pricing Options
+
+\vspace{-.2in}
+A \textcolor{red}{European call option} on a stock is a contract
+that gives the holder the right to purchase that stock at the
+named \textcolor{red}{strike price} on the \textcolor{red}{expiration date}.
+
+A \textcolor{red}{American call option} is the same, but allows the holder to
+purchase the stock at that price __on or before__ the expiration date.
+
+The classic \textcolor{red}{Black-Scholes Theory} for option pricing establishes
+a price for a European option as a function of the following: the strike price,
+the time to expiration, the current asset price, the volatility of the price, and
+the current \textcolor{red}{risk-free rate of return}.
+
+\newpage
+
+We will consider a data set consisting of 1,000 call options
+sampled on September 29, 2017.
+
+To generate this sample, NYSE stock symbols were randomly chosen, and then
+one currently-listed call option was randomly chosen for each equity,
+weighted by the volume of trading.
+
+Information recorded for each were as follows: The strike price, the time to
+expiration, the current asset price, the historical volatility (based on daily
+returns of 30 most recent trading days), the \textcolor{red}{implied volatility}
+and the Black-Scholes price for the option (with a risk-free rate of zero
+assumed).
+
+\newpage
+The full R code to generate such a sample can be found on Canvas. There are some
+important components worth pointing out:
+
+The package `quantmod` includes a function `getOptionChain()` which allows one
+to easily obtain the current options information for a ticker symbol.
+
+The package `fOptions` includes `GBSOption()` and `GBSVolatility()`,
+which can be used to calculate the Black-Scholes price and the implied
+volatility for an option, respectively.
+
+The package `TTR` includes a function `stockSymbols()` which will return
+all of the ticker symbols (along with other useful information) for the AMEX,
+NASDAQ, or NYSE exchange.
+
+\newpage
+__Exercise:__
+The following appears as part of the provided code.
+\large
+```{r,eval=FALSE}
+holdout = try(getOptionChain(cand,NULL,auto.assign=F),TRUE)
+
+if("try-error" %in% class(holdout) || length(holdout) == 0)
+{
+   next
+}
+```
+\Large
+What is the purpose of this syntax?
+
+\answerlines{4}
+
+This sample can be found in the Data Sets area on Canvas, with
+the name `optionssample09302017.txt`.
+
+```{r}
+optionsdata = read.table("optionssample09302017.txt",
+                sep=",", header=T)
+```
+
+Our objective is to explore the relationships between the
+current ask price for the option and the available variables.
+
+This is an "empirical" alternative to Black-Scholes theory,
+whose limitations are well-known, mainly due to the failure
+of the underlying normality assumption.
+
+
+\newpage
+A classic manifestation of the failure of Black-Scholes is
+the so-called \textcolor{red}{volatility smile}. Under the
+theory, a plot of implied volatility versus how far
+"in the money" the option currently is should be flat for
+options with the same expiration date.
+
+Let's create this plot in our case. Is there evidence of the
+smile here?
+
+\large
+```{r,fig.align="center"}
+optionsdata$inmoney = optionsdata$curprice - 
+                    optionsdata$strike
+optionsdata20 = filter(optionsdata, timetoexpiry==20)
+ggplot(optionsdata20, aes(x=inmoney,y=implvol)) + 
+  geom_point(size=0.5) + 
+  labs(x="Current Price - Strike Price", 
+       y="Implied Volatility")
+```
+\Large
+```{r,fig.align="center",echo=FALSE}
+ggplot(optionsdata20, aes(x=inmoney,y=implvol)) + 
+  geom_point(size=0.5) + geom_smooth(method="loess",
+            method.args=list(degree=1,family="symmetric")) +
+  labs(x="Current Price - Strike Price", 
+       y="Implied Volatility")
+```
+
+\newpage
+
+```{r,include=FALSE}
+dat = read.table("strips_dec95.txt",header=TRUE)
+dat = dat[order(dat$T),]
+Y = -diff(log(dat$price))/diff(dat$T)
+X = dat$T[2:length(dat$T)]
+
+loess.demo.chad = function(x, y, x0=NULL,span = 2/3, degree = 1, nearest = FALSE, xlim =
+	numeric(0), ylim = numeric(0), verbose = FALSE,drawcircles=TRUE,xlb="x",ylb="y",
+        drawx0=TRUE,drawnbhd=TRUE,drawlocregline=TRUE,drawlofit=TRUE)
+{
+	# function to demonstrate the locally weighted regression function loess
+	# written by Dr. Greg Snow
+	# Brigham Young University, Department of Statistics
+	# gls@byu.edu now greg.snow@imail.org
+	# Modified by Henrik Aa. Nielsen, IMM, DTU (han@imm.dtu.dk)
+	miss.xy <- is.na(x) | is.na(y)
+	x <- x[!miss.xy]
+	y <- y[!miss.xy]
+	y <- y[order(x)]
+	x <- x[order(x)]
+	fit.d <- loess(y ~ x, degree = degree, span = span,
+		family = "gaussian", control = loess.control(
+		surface = "direct"))
+	fit.i <- loess(y ~ x, degree = degree, span = span,
+		family = "gaussian")
+	est <- list(x = seq(min(x), max(x), len = 500))
+	est$y <- predict(fit.i, newdata = data.frame(x = est$
+		x))
+	xl <- range(x, est$x, xlim)
+	xl <- xl + c(-1, 1) * 0.03 * diff(xl)
+	yl <- range(y, est$y, fitted(fit.d), ylim)
+	yl <- yl + c(-1, 1) * 0.05 * diff(yl)
+	fitPlot <- function(x, y, est, fit.d, xl, yl,xlb,ylb,drawlofit)
+	{
+		plot(x, y, pch = 16, cex=0.8,xlim = xl, ylim = yl,xlab=xlb,ylab=ylb)
+#		lines(x, fitted(fit.d), col = 'red',lwd=2)
+#		mtext("Exact estimate with linear interpolation between x-values",
+#			col = 'red', adj = 0.5, line = 0.5)
+                if(drawlofit)
+                {
+		   lines(est, col = 'blue',lwd=2)
+                }
+#		mtext("Estimate obtained using the default interpolation scheme",
+#			col = 'blue', adj = 0.5, line = 2)
+
+		NULL
+	}
+        if(is.null(x0))
+        {
+	   fitPlot(x, y, est, fit.d, xl, yl,xlb,ylb,drawlofit)
+           x0 = locator(1)$x
+        }
+#	repeat {
+#		x0 <- locator(1)$x
+		if(length(x0) < 1)
+			break
+		if(nearest)
+			x0 <- unique(x[abs(x - x0) == min(
+				abs(x - x0))])
+		if(verbose){
+			cat("x0 =", x0, "\n")
+                        flush.console()
+                      }
+		if(span < 1) {
+			q <- as.integer(span * length(x))
+			d <- sort(abs(x - x0))[q]
+		}
+		else {
+			d <- max(abs(x - x0)) * sqrt(span)
+		}
+		w <- rep(0, length(x))
+		s <- abs(x - x0) <= d
+		w[s] <- (1 - (abs(x[s] - x0)/d)^3)^3
+		fitPlot(x, y, est, fit.d, xl, yl,xlb,ylb,drawlofit)
+                if(drawcircles)
+                {
+		   symbols(x, y, circles = sqrt(w), inches = 0.3,
+			add = T, col = 'lightgrey')
+                }
+		if(degree > 0)
+                        if(drawlocregline)
+                        {
+			   lines(x, fitted(lm(y ~ poly(x, degree
+				), weights = w)), col = 'purple',
+				err = -1,lwd=2)
+                        }
+		else {
+			##lines(x, fitted(lm(y ~ 1, weights = w)), col = 8, err = -1)
+                        if(drawlocregline)
+                        {
+			   abline(a = sum(w * y)/sum(w), b = 0,
+				col = 'purple',lwd=2)
+                        }
+		}
+                if(drawx0)
+                {
+		   abline(v = x0, col = 'green',lwd=2)
+                }
+                if(drawnbhd)
+                {
+		   if(x0 - d > xl[1])
+			abline(v = x0 - d, col = 'green', lty = 2)
+		   if(x0 + d < xl[2])
+			abline(v = x0 + d, col = 'green', lty = 2)
+                }
+#	}
+}
+```
+
+\newpage
+#Local Linear Regression
+
+\vspace{-.2in}
+The figure on the previous page shows a \textcolor{red}{nonparametric regression}
+or \textcolor{red}{nonparametric smooth} of the scatter plot.
+
+There are many variants of nonparametric regression, but here we focus
+on
+\textcolor{red}{local linear regression},
+a version of \textcolor{red}{local polynomial regression}. This approach has
+proven to be very powerful, and possesses many strong theoretical
+properties to justify its use.
+
+Briefly stated, this procedure works by fitting a sequence of
+linear models: Each is fit not to the entire data set, but
+to only data within a \textcolor{red}{neighborhood} of a target point.
+The size of this neighborhood is a \textcolor{red}{smoothing parameter}: Large
+neighborhoods yield a large degree of smoothing, while small
+neighborhoods result in minimal smoothing.
+
+\newpage
+Our model here is that we observe $(x_i, Y_i)$ for $i=1,2,\ldots,n$
+and that
+\[
+   Y_i = f(x_i) + \epsilon_i
+\]
+where the $\epsilon_i$ are iid with mean zero and variance $\sigma^2$.
+Assuming that the $\epsilon_i$ are normal will lead to further nice
+properties, but this development does not require that assumption.
+
+In order to construct the local linear regression estimate of $f(\cdot)$,
+it is best to consider a sequence of steps \textcolor{red}{for each fixed
+$x_0$ at which $f(\cdot)$ will be estimated}.
+
+(For context on these data, see Ruppert and Matteson, Section 11.3.)
+
+\newpage
+__Step One: Fix the target point $x_0$.__
+
+Our objective is to estimate the regression function at $x_0$.
+
+```{r,echo=FALSE,fig.align="center"}
+loess.demo.chad(X,Y,x0=10,span=0.4,xlb="X",ylb="Y",drawlocregline=FALSE,drawcircles=FALSE,
+  drawnbhd=FALSE,drawlofit=FALSE)
+```
+
+\newpage
+__Step Two: Create the neighborhood around $x_0$.__
+
+A common
+way to choose the neighborhood size is to choose is large enough
+to capture proportion $\alpha$ of the data. This
+parameter $\alpha$ is often called the \textcolor{red}{span}. A typical
+choice is $\alpha \approx 0.5$.
+
+```{r,echo=FALSE, fig.height=4,fig.align="center"}
+loess.demo.chad(X,Y,x0=10,span=0.4,xlb="X",ylb="Y",drawlocregline=FALSE,drawcircles=FALSE,
+  drawnbhd=TRUE,drawlofit=FALSE)
+```
+
+\newpage
+__Step Three: Weight the data in the neighborhood.__
+
+Values of $x$ which
+are close $x_0$ will receive a larger weight than those far from $x_0$.
+Denote by $w_i$ the weight placed on observation $i$.
+The default choice is the \textcolor{red}{tri-cube weight function}:
+\[
+   w_i = \left\{ \begin{array}{ll}
+   \left(1-\left|\frac{x_i-x_0}{\mbox{\small max dist}}\right|^3\right)^{\! 3}, & \mbox{if $x_i$ in the neighborhood of $x_0$} \\
+   0, & \mbox{if $x_i$ is not in neighborhood of $x_0$}
+\end{array}
+   \right.
+\]
+
+\newpage
+```{r,echo=FALSE,fig.align="center"}
+loess.demo.chad(X,Y,x0=10,span=0.4,xlb="X",ylb="Y",drawlocregline=FALSE,drawcircles=TRUE,
+  drawnbhd=TRUE,drawlofit=FALSE)
+```
+
+\newpage
+__Step Four: Fit the local regression line.__
+
+This is done by finding $\beta_0$ and $\beta_1$ to minimize the weighted sum of squares
+\[
+   \sum_{i=1}^n w_i \left(y_i - \left(\beta_0 + \beta_1 x_i\right)\right)^2
+\]
+
+```{r,echo=FALSE,fig.align="center",fig.height=4}
+loess.demo.chad(X,Y,x0=10,span=0.4,xlb="X",ylb="Y",drawlocregline=TRUE,drawcircles=TRUE,
+  drawnbhd=TRUE,drawlofit=FALSE)
+```
+
+
+\newpage
+
+__Step Five: Estimate $f(x_0)$.__
+
+This is done using the fitted regression line to estimate the regression
+function at $x_0$:
+\[
+   \widehat f(x_0) = \widehat \beta_0 + \widehat \beta_1 x_0
+\]
+
+```{r,echo=FALSE,fig.align="center",fig.height=4}
+loess.demo.chad(X,Y,x0=10,span=0.4,xlb="X",ylb="Y",drawlocregline=TRUE,
+                drawcircles=FALSE, drawnbhd=FALSE,drawlofit=TRUE)
+```
+
+
+\newpage
+
+This is implemented in R using `loess()`:
+
+```{r}
+holdlo = loess(implvol ~ inmoney, 
+               data=optionsdata20, degree=1)
+```
+Setting `degree = 1` is necessary in order to get local linear
+models. You can use the default `degree = 2` to get local
+quadratic fits, but this is usually unnecessary.
+
+`ggplot` makes it easy to place the local linear regression 
+fit onto the plot. Note how `degree=1` is passed on to `loess()`:
+
+\large
+```{r,fig.align="center"}
+ggplot(optionsdata20, aes(x=inmoney,y=implvol)) + 
+  geom_point(size=0.5) + geom_smooth(method="loess",
+            method.args=list(degree=1)) +
+  labs(x="Current Price - Strike Price", 
+       y="Implied Volatility")
+```
+\Large
+
+#Smoothing parameter selection in Regression
+
+\vspace{-.2in}
+Just like the choice of the bandwidth in kernel density estimation, 
+the smoothing parameter in nonparametric regression controls how
+"smooth" the resulting estimate is: A smaller value leads to a "rougher"
+estimate, a larger value gives a "smoother" estimate.
+
+The argument `span` to `loess()` controls the span, as defined above.
+The default value is 0.75.
+
+__Exercise:__ Try refitting the model above with smaller and larger values
+of `span`.
+
+\newpage
+Automated approaches to smoothing parameter selection do exist. Different ideas
+are available, but a very popular approach is based on \textcolor{red}{cross validation}.
+
+The motivation behind cross validation is that we seek a regression function that
+makes accurate predictions for __new__ observations, not for those that are used
+to fit the model. A regression function that makes accurate predictions only for
+training data is said to be \textcolor{red}{overfit}. Overfitting is a serious
+problem, and is a leading drawback to the use of flexible nonparametric and
+machine learning methods.
+
+\newpage
+__Exercise:__ Discuss how nonparametric regression, and the choice of the
+smoothing parameter, leads to increased risk of overfitting. Does choosing
+the smoothing parameter to minimize residual sum of squares seem like a good idea?
+
+\answerlines{7}
+
+\newpage
+The \textcolor{red}{residual sum of squares} in this case is
+\[
+\mbox{RSS} = \sum_{i=1}^n \left(Y_i - \widehat f_{\!h}\!\left(x_i\right)\right)^2
+\]
+where $\widehat f_{\!h}\!\left(x_i\right)$ is the estimate of the regression
+function $f()$ when smoothing parameter $h$ is used.
+
+Instead of choosing $h$ to minimize ${\rm RSS}$, we minimize the
+\textcolor{red}{leave-one-out cross validation score}:
+\[
+  \mbox{LOOCV} = \sum_{i=1}^n \left(Y_i - \widehat f_{\!h}^{(-i)}\!\left(x_i\right)\right)^2
+\]
+where $f_{\!h}^{(-i)}\!\left(x_i\right)$ is the estimate of
+the regression function \textcolor{red}{when the $i^{th}$ observation
+is excluded from the training set}.
+
+The idea here is that, by leaving out observation $i$, we are treating
+it as if it were a "new" observation, and testing to see how well this
+choice of $h$ does in predicting the response.
+
+\newpage
+There is another R function `loess.as()`, which is part
+of the package `fANCOVA`, which has built in selection of
+the span.
+
+The syntax is
+
+```{r}
+holdlo2 = loess.as(optionsdata20$inmoney, 
+      optionsdata20$implvol,criterion = "gcv")
+```
+
+
+With this function the default is `degree = 1`.
+Setting `criterion="gcv"` uses \textcolor{red}{generalized cross
+validation}, which is an approximation to leave-one-out cross validation.
+
+The optimal span can be found via
+
+```{r}
+holdlo2$pars$span
+```
+
+\newpage
+
+#Robust Fits
+
+\vspace{-.2in}
+__Exercise:__ Reconsider the smooth shown in the Figure on Slide 53 above.
+Does it appear to be a good fit?
+
+\answerlines{7}
+
+\newpage
+The problem in the fit is that the extreme values are overly \textcolor{red}{influential}. Least squares is particularly
+sensitive to these extremes; the large response values are "pulling up"
+the estimate.
+
+Fortunately, `loess()` and `loess.as()` allow one to move away from
+least squares, by setting the argument `family="symmetric"` instead
+of the default `family="gaussian"`.
+
+```{r}
+holdlo3 = loess.as(optionsdata20$inmoney, 
+      optionsdata20$implvol, family="symmetric", 
+      criterion = "gcv")
+```
+
+\newpage
+
+__Exercise:__ What is the reasoning behind using the name
+`family`, with value `symmetric`, to specify a robust fit?
+
+\answerlines{8}
+
+
+\newpage
+Now, we refit with this span, using `family="symmetric"`:
+
+```{r,fig.align="center"}
+ggplot(optionsdata20, aes(x=inmoney,y=implvol)) + 
+  geom_point(size=0.5) + 
+  geom_smooth(method="loess", span=holdlo3$pars$span,
+      method.args=list(degree=1, 
+       family="symmetric")) +
+  labs(x="Current Price - Strike Price", 
+       y="Implied Volatility")
+```
+
+\newpage
+#Confidence Interval
+
+\vspace{-.2in}
+
+The depicted gray region around the regression function estimate
+is a \textcolor{red}{95\% pointwise confidence band} for the regression
+function.
+
+The __proper__ interpretation is as follows: For each predictor value $x$,
+the gray region displays a 95\% confidence interval for $f(x)$.
+
+Here are two crucial things to understand regarding the band:
+
+1. The shaded area does __not__ show a __simultaneous__ 95\% confidence
+band for the __entire__ regression function.
+
+2. The shaded area does __not__ show 95\% \textcolor{red}{prediction
+intervals} for new observations.
+
+\newpage
+__Exercise:__ Discuss the two misconceptions given above, and how they
+differ from the real interpretation.
+
+\answerlines{8}
+
+\newpage
+
+#Exploring Relationships
+
+\vspace{-.2in}
+
+Now we will dig a little deeper into the options sample,
+and explore relationships between the relevant properties
+of an option and its current ask price.
+
+First, consider the distribution of the prices.
+There is a notable skew. In what follows we will work with
+the logarithm of the ask price.
+
+```{r, fig.align="center"}
+ggplot(optionsdata, aes(x=ask)) + geom_density() +
+  labs(x="Current Price (Ask)", y="Density")
+```
+
+\newpage
+The next plots compare historical volatility, time to expiration,
+and strike price to the price. The code is only shown here for the
+first plot:
+
+```{r,fig.align="center",warning=FALSE}
+ggplot(optionsdata, aes(x=histvol,y=log10(ask))) + 
+  geom_point(size=0.5) + 
+  geom_smooth(method="loess",
+              method.args=list(degree=1)) +
+  labs(x="Historical Volatility", 
+       y="Log Option Price (Ask)")
+```
+
+```{r,fig.align="center",warning=FALSE,echo=FALSE}
+ggplot(optionsdata, aes(x=timetoexpiry,y=log10(ask))) + 
+  geom_point(size=0.5) + 
+  geom_smooth(method="loess",
+              method.args=list(degree=1)) +
+  labs(x="Time to Expiration (days)", 
+       y="Log Option Price (Ask)")
+```
+
+```{r,fig.align="center",warning=FALSE,echo=FALSE}
+ggplot(optionsdata, aes(x=strike,y=log10(ask))) + 
+  geom_point(size=0.5) + 
+  geom_smooth(method="loess",
+              method.args=list(degree=1)) +
+  labs(x="Strike Price", 
+       y="Log Option Price (Ask)")
+```
+
+\newpage
+__Exercise:__ One might guess that there is a strong relationship
+between the price of the option and how far "in the money" it currently
+is, i.e., the difference between the current price of the stock and
+its strike price. Construct a plot to explore this.
+
+\answerlines{6}
+
+```{r,fig.align="center",warning=FALSE,echo=FALSE,include=FALSE}
+ggplot(optionsdata, aes(x=curprice-strike,y=log10(ask))) + 
+  geom_point(size=0.5) + 
+  geom_smooth(method="loess", span =0.1,
+              method.args=list(degree=1, family="symmetric")) +
+  labs(x="Current Price - Strike Price", 
+       y="Log Option Price (Ask)")
+```
+
+\newpage
+Next we will construct a plot attempting to explore how a pair of variables
+relate to the price.
+
+Let's bin the historical volatility into four groups:
+
+\large
+```{r}
+breaks = c(-Inf, quantile(optionsdata$histvol, 
+                          c(0.25,0.5,0.75)), Inf)
+optionsdata$histvolbin = cut(optionsdata$histvol, 
+                      breaks, labels=c(1,2,3,4))
+```
+
+```{r,fig.align="center",warning=FALSE}
+ggplot(optionsdata, aes(x=timetoexpiry,y=log10(ask),
+                        color=histvolbin)) + 
+  geom_point(size=0.5) + 
+  geom_smooth(method="loess",
+              method.args=list(degree=1)) +
+  labs(x="Time to Expiration (days)", 
+       y="Log Option Price (Ask)", 
+       color="Hist. Vol. Bin") + 
+  xlim(0,230)
+```
+\Large
+\newpage
+__Exercise:__ Interpret the graph on the previous page.
+
+\answerlines{8}
+
