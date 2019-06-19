@@ -1,0 +1,258 @@
+library(ggplot2)
+library(quantmod)
+library(dplyr)
+library(fANCOVA)
+
+
+------------------------------------------------------------------------
+Slide 4:
+
+plot(density(x=0, bw=1, 
+    kernel=c("gaussian")),main="",xlab=expression(x),
+     ylab=expression(K(x)), cex.axis=1.2,cex.lab=1.2,lwd=2)
+points(density(x=0,bw=1,kernel="ep"),lty=2,col=4,lwd=2,type="l")
+points(density(x=0,bw=1,kernel="bi"),lty=4,col=2,lwd=2,type="l")
+legend("topleft",legend=c("Gaussian","Epanechnikov","Biweight"),
+    lwd=2,lty=c(1,2,4), col=c(1,4,2),cex=1.2)
+
+
+------------------------------------------------------------------------
+Slide 17:
+
+x = rnorm(10000)
+densout = density(x, bw="SJ")
+plot(densout)
+curve(dnorm(x), add=T, col="red", lty=2)
+
+
+------------------------------------------------------------------------
+Slide 18:
+
+ggplot(trainmerged, aes(x=calculatedfinishedsquarefeet)) + 
+   geom_density(bw="SJ", color="red") + 
+   labs(x="Calculated Finished Square Feet") +
+   scale_x_log10()
+
+
+------------------------------------------------------------------------
+Slide 20:
+
+ggplot(trainmerged, aes(x=taxamount, color=logerrorbin)) + 
+   geom_density(bw="SJ") + 
+   labs(x="Tax Amount", color="Log Error Bin") +
+   scale_x_log10()
+
+
+------------------------------------------------------------------------
+Slide 23:
+
+Kellogg = getSymbols("K",
+  from="2010-1-1",to="2016-12-31", auto.assign=F)
+
+ldrK = data.frame(dailyReturn(Ad(Kellogg), type="log"))
+
+
+------------------------------------------------------------------------
+Slide 24:
+
+ggplot(ldrK,aes(x=daily.returns)) + 
+  geom_density(bw="SJ",aes(color="kde")) +
+  stat_function(fun=dnorm, aes(color="normal"),
+      args=list(mean=mean(ldrK$daily.returns),
+                sd=sd(ldrK$daily.returns))) +
+  scale_color_manual(name="",
+              values=c("kde"="red","normal"="blue")) +
+  labs(x="Log Daily Return",title="Data for Kellogg (K)",
+       subtitle="January 2010 through December 2016")
+
+
+------------------------------------------------------------------------
+Slide 25:
+
+ggplot(ldrK,aes(x=daily.returns)) + 
+  geom_density(bw="SJ",aes(color="kde")) +
+  stat_function(fun=dnorm, aes(color="normal"),
+      args=list(mean=mean(ldrK$daily.returns),
+                sd=sd(ldrK$daily.returns))) +
+  scale_color_manual(name="",
+              values=c("kde"="red","normal"="blue")) +
+  labs(x="Log Daily Return",title="Data for Kellogg (K)",
+       subtitle="January 2010 through December 2016") +
+  scale_y_log10()
+
+
+------------------------------------------------------------------------
+Slide 30:
+
+kCDF = function(x, res=100, ...)
+{
+   holddens = density(x,...)
+   interpdens = approxfun(holddens$x, holddens$y, 
+                            yleft=0, yright=0)
+   xseq = seq(min(holddens$x),max(holddens$x),length=res)
+   holdout = numeric(res)
+   for(i in 1:res)
+   {
+      holdout[i] = integrate(interpdens, lower=min(holddens$x),
+                  upper=xseq[i], stop.on.error=FALSE)$value
+   }
+   CDF = approxfun(xseq, holdout, yleft=0, yright=1)
+   invCDF = approxfun(holdout, xseq, yleft=NA, yright=NA)
+   list(CDF=CDF, invCDF=invCDF)
+}
+
+
+------------------------------------------------------------------------
+Slide 32:
+
+fulldata = read.table("q1_2017_all.csv", sep=",", header=T, quote="")
+fulldata$Date = as.Date(as.character(fulldata$Date), format="%Y%m%d")
+fulldata = fulldata[!duplicated(fulldata[,c(1,3)], fromLast=TRUE),]
+fulldata$McapRank = factor(fulldata$McapRank, ordered=TRUE)
+fulldata$TurnRank = factor(fulldata$TurnRank, ordered=TRUE)
+fulldata$VolatilityRank = factor(fulldata$VolatilityRank, ordered=TRUE)
+fulldata$PriceRank = factor(fulldata$PriceRank, ordered=TRUE)
+
+
+cancelbyticker = split(fulldata$Cancels,fulldata$Ticker)
+cancelbyticker = 
+  cancelbyticker[sapply(cancelbyticker,length)>=5]
+
+
+------------------------------------------------------------------------
+Slide 33:
+
+CDFsbyTicker = lapply(cancelbyticker, kCDF, bw="SJ")
+
+pseq = seq(0.1,0.9, by=0.1)
+
+holdquantiles = matrix(ncol=length(pseq), 
+                       nrow=length(CDFsbyTicker))
+for(i in 1:length(CDFsbyTicker))
+{
+   holdquantiles[i,] = CDFsbyTicker[[i]]$invCDF(pseq)
+}
+
+
+
+
+
+------------------------------------------------------------------------
+Slide 40
+
+optionsdata = read.table("optionssample09302017.txt",
+                sep=",", header=T)
+
+
+------------------------------------------------------------------------
+Slide 41:
+
+optionsdata$inmoney = optionsdata$curprice - 
+                    optionsdata$strike
+optionsdata20 = filter(optionsdata, timetoexpiry==20)
+ggplot(optionsdata20, aes(x=inmoney,y=implvol)) + 
+  geom_point(size=0.5) + 
+  labs(x="Current Price - Strike Price", 
+       y="Implied Volatility")
+
+
+------------------------------------------------------------------------
+Slide 52:
+
+holdlo = loess(implvol ~ inmoney, 
+               data=optionsdata20, degree=1)
+
+
+ggplot(optionsdata20, aes(x=inmoney,y=implvol)) + 
+  geom_point(size=0.5) + geom_smooth(method="loess",
+            method.args=list(degree=1)) +
+  labs(x="Current Price - Strike Price", 
+       y="Implied Volatility")
+
+
+------------------------------------------------------------------------
+Slide 58:
+
+holdlo2 = loess.as(optionsdata20$inmoney, 
+      optionsdata20$implvol,criterion = "gcv")
+
+
+------------------------------------------------------------------------
+Slide 60:
+
+holdlo3 = loess.as(optionsdata20$inmoney, 
+      optionsdata20$implvol, family="symmetric", 
+      criterion = "gcv")
+
+
+------------------------------------------------------------------------
+Slide 62:
+
+ggplot(optionsdata20, aes(x=inmoney,y=implvol)) + 
+  geom_point(size=0.5) + 
+  geom_smooth(method="loess", span=holdlo3$pars$span,
+      method.args=list(degree=1, 
+       family="symmetric")) +
+  labs(x="Current Price - Strike Price", 
+       y="Implied Volatility")
+
+
+------------------------------------------------------------------------
+Slide 66:
+
+ggplot(optionsdata, aes(x=ask)) + geom_density() +
+  labs(x="Current Price (Ask)", y="Density")
+
+
+------------------------------------------------------------------------
+Slide 68:
+
+ggplot(optionsdata, aes(x=histvol,y=log10(ask))) + 
+  geom_point(size=0.5) + 
+  geom_smooth(method="loess",
+              method.args=list(degree=1)) +
+  labs(x="Historical Volatility", 
+       y="Log Option Price (Ask)")
+
+
+------------------------------------------------------------------------
+Slide 70:
+
+ggplot(optionsdata, aes(x=timetoexpiry,y=log10(ask))) + 
+  geom_point(size=0.5) + 
+  geom_smooth(method="loess",
+              method.args=list(degree=1)) +
+  labs(x="Time to Expiration (days)", 
+       y="Log Option Price (Ask)")
+
+
+------------------------------------------------------------------------
+Slide 71:
+
+ggplot(optionsdata, aes(x=strike,y=log10(ask))) + 
+  geom_point(size=0.5) + 
+  geom_smooth(method="loess",
+              method.args=list(degree=1)) +
+  labs(x="Strike Price", 
+       y="Log Option Price (Ask)")
+
+
+
+------------------------------------------------------------------------
+Slide 73:
+
+breaks = c(-Inf, quantile(optionsdata$histvol, 
+                          c(0.25,0.5,0.75)), Inf)
+optionsdata$histvolbin = cut(optionsdata$histvol, 
+                      breaks, labels=c(1,2,3,4))
+
+
+ggplot(optionsdata, aes(x=timetoexpiry,y=log10(ask),
+                        color=histvolbin)) + 
+  geom_point(size=0.5) + 
+  geom_smooth(method="loess",
+              method.args=list(degree=1)) +
+  labs(x="Time to Expiration (days)", 
+       y="Log Option Price (Ask)", 
+       color="Hist. Vol. Bin") + 
+  xlim(0,230)
