@@ -1,0 +1,1250 @@
+---
+output:
+  pdf_document:
+    highlight: default
+urlcolor: blue
+geometry:
+- margin=1in
+- paperheight=6.5in
+- paperwidth=8.5in
+header-includes:
+- \usepackage{fancyhdr}
+- \fancyhead{}
+- \fancyfoot{}
+- \chead{Dimension Reduction}
+- \lhead{Lecture Notes for FDS}
+- \rhead{\footnotesize Slide \thepage}
+- \pagestyle{fancy}
+- \parindent=0in
+- \renewcommand{\baselinestretch}{1.3}
+- \usepackage{palatino}
+- \usepackage{color}
+- \usepackage [pagewise, mathlines, displaymath]{lineno}
+- \input defs.tex
+- \parskip 0.15in
+fontsize: 11pt
+#fontfamily: mathpazo
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+library(ggplot2)
+library(vegan)
+library(distances)
+knitr::opts_chunk$set(echo = TRUE, comment="", prompt=TRUE)
+hook1 <- function(x){ gsub("```\n*```r*\n*", "", x) }
+hook2 <- function(x){ gsub("```\n+```\n", "", x) }
+knit_hooks$set(document = hook2)
+setwd("~/Teaching/MSCF/DScourses/LectureNotes/Part8_DimRed")
+```
+
+
+\thispagestyle{fancy}
+\linenumbers
+\Large
+
+\Huge
+{\bf Part 8: Dimension Reduction}
+\Large
+
+#Summary
+
+\vspace{-.2in}
+Often data come to us in a \textcolor{red}{high-dimensional form}, meaning
+that each observation is actually best thought of as a vector of many
+numbers.
+
+In some situations, it is crucial that lower-dimensional representations of
+these data are obtained. Here we present some approaches to doing that.
+
+First, we motivated why this dimension reduction can be so important.
+
+\newpage
+
+#The Curse of Dimensionality
+
+\vspace{-.2in}
+
+Despite the promise of nonparametric approaches, they suffer from a serious
+drawback: The amount of data required to fit nonparametric density estimates
+or regressions well increases exponentially with the dimension of the data.
+
+This is called the \textcolor{red}{Curse of Dimensionality}.
+
+\newpage
+To start, we ask: __What is the "dimension" of data?__
+
+Standard data come to us in the form of numbers, but a single \textcolor{red}{observation}
+is often best thought of as a list of numbers. 
+
+For example, a \textcolor{red}{yield curve}
+shows how bond rates vary as a function of time to maturity. A single yield curve consists
+of several numbers, usually around ten rates. This count of how many numbers it takes to
+represent a yield curve is called its \textcolor{red}{dimension}. We would say that a single
+yield curve is "ten-dimensional."
+
+Another example: Imagine our data consists of separate price time series for each of 100
+stocks. Each series goes back 20 trading days. We would say in this case that we have
+"100 observations of 20-dimensional time series".
+
+\newpage
+
+One place where the dimension of data often comes up is in the context of regression
+or supervised learning. If there are $p$ predictors being used in a model for a
+response variable, we would say that we are using a "$p$-dimensional predictor vector."
+
+Nonparametric regression is possible when the predictor vector is $p$-dimensional.
+For instance, if $p=2$, a neighborhood can be thought of as a square centered on
+the target value. Local linear regression involves fitting a plane within this square.
+
+Reconsider our options sample from the previous Part. The figure on the following
+page shows a two-dimensional local linear regression fit. The response is the
+"error" in the Black-Scholes price (relative to the ask price) and the predictors
+are the time to expiration and the strike price.
+
+\newpage
+
+First, read in the data and fit the model:
+\large
+```{r}
+optionsdata = read.table("optionssample09302017.txt", 
+                         header=T, sep=",")
+optionsdata$bserr = optionsdata$bsval - optionsdata$ask
+
+holdlo2d = loess(bserr ~ timetoexpiry + strike, 
+                 data=optionsdata, degree=1)
+```
+\Large
+
+The function `expand.grid()` creates a two-dimensional grid of values from
+two vectors.
+\large
+```{r}
+fullgrid = expand.grid(
+  timetoexpiry=
+    seq(min(optionsdata$timetoexpiry),
+        max(optionsdata$timetoexpiry),length=20),
+  strike=seq(min(optionsdata$strike),
+             max(optionsdata$strike),length=20))
+```
+\Large
+
+Now, make the predictions on this grid:
+
+\large
+```{r}
+fits = predict(holdlo2d,newdata=as.matrix(fullgrid))
+```
+\Large
+
+Finally, create the plot. Note the use of the syntax `color=..level..` in order
+to specify that the colors should reflect the different levels in the contour
+plot.
+\large
+```{r}
+fitframe = data.frame(cbind(fullgrid,fits))
+
+ggplot(fitframe, aes(x=timetoexpiry,y=strike,z=fits)) +
+  geom_contour(aes(color=..level..)) +
+  scale_color_gradient2(low="blue", high="red", 
+                        mid="yellow",midpoint=0) +
+  labs(x="Time to Expiration (days)", y="Strike Price",
+       color="Error")
+```
+
+\Large
+
+\newpage
+__Exercise:__
+The next plot adds on the 1,000 observed predictor pairs used in this
+case. Sketch the neighborhood when the regression function is estimated
+at $(400,200)$. What will have to happen in order for this estimate to
+have sufficiently low variance?
+
+\answerlines{5}
+
+\newpage
+```{r, echo=FALSE,warning=FALSE}
+ggplot(fitframe, aes(x=timetoexpiry,y=strike,z=fits)) +
+  geom_contour(aes(color=..level..)) +
+  scale_color_gradient2(low="blue",high="red",mid="yellow",midpoint=0) +
+  labs(x="Time to Expiration (days)", y="Strike Price", color="Error") +
+    geom_jitter(data=optionsdata,mapping=aes(x=timetoexpiry,y=strike,z=bserr))
+```
+
+\newpage
+This example shows the fundamental challenge of working with high-dimensional
+predictors: As the dimension increases, the available observations become more
+"spread out." Neighborhoods must be made larger in order to compensate and
+achieve estimates with acceptable variance.
+
+But, choosing a large neighborhood takes away a key feature of using nonparametric
+approaches: We want the estimate to be flexible, and not be based on too much "smoothing."
+
+\newpage
+
+Consider the plot on the following slide.
+
+Here, the sample size is 100. Each observation is
+two-dimensional, i.e., imagine these are the two
+predictors. These data are simulated from uniform distributions.
+
+The "marks" shown in each margin depict the \textcolor{red}{marginal
+distribution} for each predictor. Note that in the margins, the
+data appear to be quite closely spaced. If we were to fit a nonparametric
+regression using just one predictor, neighborhoods could be chosen
+small.
+
+But, in two dimensions, large gaps appear in the distribution of the
+observations. Neighborhoods will have to be chosen larger in order to
+capture enough data.
+
+\newpage
+```{r, fig.align="center",echo=FALSE,fig.width=5}
+set.seed(0)
+testframe = data.frame(X1=runif(100),X2=runif(100))
+
+ggplot(testframe, aes(x=X1,y=X2)) +
+  geom_rug() + geom_point() +
+  labs(x="Predictor One", y="Predictor Two")
+``` 
+\newpage
+Another way of thinking about it: Under the uniform setup, with a $p$-dimensional predictor, in order
+for a neighborhood to include proportion $\alpha$ of the data, the length of the sides of the
+neighborhood must be $\alpha^{1/p}$. This plot shows the case where $\alpha = 0.4$.
+
+```{r,echo=FALSE,fig.align="center",fig.width=5,fig.height=4.15}
+pseq = 1:20
+plot(pseq, 0.4^(1/pseq),type="b",ylim=c(0.4,1),pch=16,xlab="p",
+     ylab="Length of Side")
+```
+
+\newpage
+__Exercise:__ Suppose that $p=5$. Under our uniform setup, how long are the sides of a neighborhood that covers
+40% of the data? What are the implications of this?
+
+\answerlines{7}
+
+\newpage
+
+__Exercise:__ Again assume our uniform predictor distribution. Define that an observation is
+"close to the boundary" if it is either less than 0.1 or greater than 0.9 for at least one
+predictor. What proportion of the observations are "close to the boundary?"
+
+\answerlines{7}
+
+\newpage
+The curse of dimensionality motivates us to consider methods which create
+\textcolor{red}{low-dimensional representations} of data.
+
+In many cases, data which are $p$-dimensional in their original form can
+be compressed to $q$ dimensions, where $q \ll p$, with minimal loss of
+important information.
+
+The aforementioned yield curves provide an important example. The daily yield
+curve consists of approximately 10 rates, but a yield curve takes a limited
+class of shapes. Shifts in the yield curve can be described using three numbers
+in most situations. Hence, a 10-dimensional object can be described compressed
+to three dimensions.
+
+\newpage
+
+#Web Scraping Example: Obtaining Treasury Yield Curves
+
+\vspace{-.2in}
+
+\textcolor{red}{Web scraping} refers to automatically pulling data off of web
+sites.
+
+Here we will illustrate an example of doing this for a data set of interest
+using the R package `rvest`.
+
+Every implementation of web scraping is going to present its own challenges, but
+the general concepts presented here should be useful.
+
+\newpage
+
+The data we will use in this example consist of daily treasury yield curves, found
+at the following URL:
+
+\footnotesize
+
+https://www.treasury.gov/resource-center/data-chart-center/interest-rates/Pages/TextView.aspx?data=yieldAll
+
+\Large
+which I have conveniently shortened to https://goo.gl/j97141
+
+Data on this page go back to the start of 1990.
+
+A \textcolor{red}{yield curve} is simply the relationship between the yield for the
+bonds of a single type and the time to maturity. 
+
+
+\newpage
+
+To get started, install the package `rvest` and load it up. Then use the function
+`read_html()` to read in the desired web page:
+
+```{r, echo=FALSE,message=FALSE}
+library(rvest)
+```
+
+```{r}
+fullYCweb = read_html("https://goo.gl/j97141")
+```
+
+The function `html_nodes()` allows ones to easily extract elements of the
+web page by specifying \textcolor{red}{CSS selectors}, which are identifiers
+that one can use to define formatting for elements of similar types.
+
+See https://www.w3schools.com/cssref/trysel.asp for illustrative examples.
+
+\newpage
+
+__Exercise:__ Take a moment and study the \textcolor{red}{source} of the target
+web page. (All web browsers have an option that allows you to view the source.)
+Find where in the source the desired data resides.
+
+\answerlines{5}
+
+\newpage
+A typical piece of the data table appears as follows:
+
+\small
+`<td class="text_view_data">7.83</td><td class="text_view_data">7.89</td>`
+\Large
+
+In this example, `text_view_data` is a CSS selector. It is a "class," meaning
+that it is a selector shared across different elements. These are defined
+using an extra period, e.g., `.class_name` and this is how they should be
+referenced within `html_nodes()`.
+
+So, the following command will extract all of the nodes which include that
+CSS selector:
+
+```{r}
+tvdnodes = html_nodes(fullYCweb, ".text_view_data")
+```
+
+\newpage
+
+You will note that the elements of `tvdnodes` contain extra, undesired information.
+Fortunately, `rvest` has another function, `html_text()` which strips away the
+unwanted wrappers.
+
+```{r}
+tableelements = html_text(tvdnodes)
+print(tableelements[1:10])
+```
+
+
+
+\newpage
+One clear problem is that the `N/A` values in the original table are now
+appearing with extra formatting characters.
+
+The `grep()` function allows for a search over \textcolor{red}{regular expressions}.
+This is a large topic, but, briefly stated, regular expressions allow for searching
+for strings that meet flexible requirements.
+
+Here we simply use the following command to
+return all entries in `tableelements` that contain `N/A`:
+
+```{r, eval=FALSE}
+grep("N/A", tableelements)
+```
+So, the following command will clean things up:
+
+```{r}
+tableelements[grep("N/A", tableelements)] = NA
+```
+
+\newpage
+
+Now let's get the table into a proper format:
+```{r}
+YCdata = matrix(tableelements, ncol=12,byrow=TRUE)
+YCdata = data.frame(YCdata, stringsAsFactors=FALSE)
+names(YCdata) = c("Date","1mo","3mo","6mo","1yr",
+                "2yr","3yr","5yr","7yr","10yr",
+                "20yr","30yr")
+YCdata$Date = as.Date(YCdata$Date,format="%m/%d/%y")
+YCdata[,2:12] = apply(YCdata[,2:12],2,as.numeric)
+```
+
+
+\newpage
+The package `reshape2` has some nice functions for adjusting data
+frames to get them into a desired form. Here, in order to create a plot
+we need the rates in a "long" form, with one rate per line. The `melt()`
+function will do this:
+
+```{r,include=FALSE}
+set.seed(0)
+```
+
+\large
+```{r, warning=FALSE}
+library(reshape2)
+YCmelt = melt(YCdata, id.vars="Date")
+maturities = c(1/12,3/12,6/12,1,2,3,5,7,10,20,30)
+YCmelt$maturity = 
+    maturities[as.integer(YCmelt$variable)]
+YCmeltsub = 
+    YCmelt[YCmelt$Date %in% sample(YCmelt$Date, size=10), ]
+ggplot(YCmeltsub, aes(x=maturity,y=value,
+        color=factor(Date))) + 
+  geom_line() +
+  labs(x="Maturity (years)", y="Rate (%)", color="Date")
+```
+\Large
+
+\newpage
+
+#Principal Components Analysis
+
+A standard, classic tool for dimension reduction is
+\textcolor{red}{principal components analysis (PCA)}. It has
+some drawbacks, mostly in that it is best suited to find
+__linear__ structure in data, but in the right situation it can
+be a very effective tool.
+First, consider the synthetic data shown in the following figure.
+
+```{r,echo=FALSE,fig.align="center",fig.height=4.25}
+set.seed(1)
+library(mvtnorm)
+mu = c(0,0)
+corr=0.98
+Sigma=matrix(c(1,corr,corr,1),nrow=2)
+x = rmvnorm(100,mu,Sigma)
+pcaout = princomp(x)
+
+par(pty="s")
+plot(x[,1],x[,2],pch=16,xlab="",ylab="",xaxt="n",yaxt="n",bty="n",xlim=c(-3,3),ylim=c(-3,3),cex=0.8)
+offx = -0.5
+offy = -0.7
+lines(c(-3,3),c(offy,offy),lwd=2)
+lines(c(offx,offx),c(-3,3),lwd=2)
+text(2.9,offy-0.2,expression(x[1]))
+text(offx-0.2,2.9,expression(x[2]))
+```
+\newpage
+
+__Exercise:__ Comment on the structure seen in the pair of variables shown in
+the previous figure. Would you say that the current pair of axes is the most
+"natural" way to represent the data?
+
+\answerlines{7}
+
+\newpage
+The figure below shows the same data, with a new $(u_1, u_2)$
+coordinate system shown as the dashed lines.
+
+```{r,echo=FALSE,fig.align="center"}
+par(pty="s")
+plot(x[,1],x[,2], pch=16,xlab="",ylab="",xaxt="n",yaxt="n",bty="n",xlim=c(-3,3),ylim=c(-3,3))
+
+offx = -0.5
+offy = -0.7
+
+lines(c(-3,3),c(offy,offy),lwd=2)
+lines(c(offx,offx),c(-3,3),lwd=2)
+
+text(2.9,offy-0.2,expression(x[1]))
+
+text(offx-0.2,2.9,expression(x[2]))
+
+#lines(c(-3,3),c(-3,3),lwd=2,lty=2,col=2)
+#lines(c(-3,3),c(3,-3),lwd=2,lty=2,col=2)
+
+slope = (pcaout$center[2]-pcaout$loadings[2,1])/(pcaout$center[1]-pcaout$loadings[1,1])
+slope = pcaout$loadings[2,1]/pcaout$loadings[1,1]
+inter = pcaout$center[2]-slope*pcaout$center[1]
+abline(a=inter,b=slope, lwd=2,lty=2,col=2)
+
+slopenew = (-1)/slope
+slope = (pcaout$center[2]-pcaout$loadings[2,2])/(pcaout$center[1]-pcaout$loadings[1,2])
+slope = pcaout$loadings[2,2]/pcaout$loadings[1,2]
+#slope = slopenew
+inter = pcaout$center[2]-slope*pcaout$center[1]
+abline(a=inter,b=slope, lwd=2,lty=2,col=2)
+
+text(3.1,2.8,expression(u[1]))
+text(-3.0,2.8,expression(u[2]))
+```
+
+These axes seem to be a more natural representation of the data. In particular,
+we note that the $u_1$ axis captures the major source of variability in the data.
+These axes are formed from the \textcolor{red}{principal components} of the data.
+
+\newpage
+
+#Formal Setup of PCA
+
+\vspace{-.2in}
+Suppose we have observed $n$ vectors ${\bf x}_i$, each of
+which is of dimension $p$:
+\[
+    {\bf x}_i = (x_{i1}, x_{i2}, \ldots, x_{ip})^T,
+    \:\:\:\:\:\: i=1,2,\ldots,n.
+\]
+
+For example, ${\bf x}_i$ could be a single yield curve, with $p \approx 10$.
+
+Consider the collection of all possible linear combinations of the
+original variables formed by different choices of ${\bf u}$:
+\[
+   v_i = \sum_{j=1}^p u_j (x_{ij}-\overline{x}_j), \:\:\:\:\: i=1,2,\ldots,n
+\]
+where $\overline{x}_j$ is the mean of the $j^{th}$ variable,
+subject to
+\[
+   \sum_{j=1}^p u_j^2 = 1.
+\]
+
+\newpage
+Hence, we can think of each choice of ${\bf u}$ as being a different
+__direction__ centered on the sample mean.
+
+The new measurements $v_1, v_2, \ldots, v_n$ are the __projections__ of
+the original observations onto this new direction.
+
+__We now ask:__ What choice of
+${\bf u}$ maximizes the sample variance of the resulting numbers
+$v_1, v_2, \ldots, v_n$?
+
+```{r,echo=FALSE,fig.align="center",fig.height=4.0}
+set.seed(1)
+library(mvtnorm)
+mu = c(0,0)
+corr=0.98
+Sigma=matrix(c(1,corr,corr,1),nrow=2)
+x = rmvnorm(100,mu,Sigma)
+pcaout = princomp(x)
+
+par(pty="s")
+plot(x[,1],x[,2],pch=16,xlab="",ylab="",xaxt="n",yaxt="n",bty="n",xlim=c(-3,3),ylim=c(-3,3),cex=0.8)
+offx = -0.5
+offy = -0.7
+lines(c(-3,3),c(offy,offy),lwd=2)
+lines(c(offx,offx),c(-3,3),lwd=2)
+text(2.9,offy-0.2,expression(x[1]))
+text(offx-0.2,2.9,expression(x[2]))
+```
+
+\newpage
+
+
+__The Math:__ 
+
+If ${\bf A}$ is a symmetric, positive definite matrix then
+the choice of ${\bf u}$ that maximizes ${\bf u}^T {\bf A} {\bf u}$ subject
+to ${\bf u}^T {\bf u}$ is the first eigenvector of ${\bf A}$.
+
+Recall that
+\[
+ V({\bf u}^T {\bf x}) = {\bf u}^T \boldSigma {\bf u}
+\]
+where $V({\bf x}) = \boldSigma$.
+
+We approximate $\boldSigma$ using the sample covariance matrix $\widehat \boldSigma$.
+
+The leading eigenvector of $\widehat \boldSigma$ is the first principal component.
+
+The additional principal components ${\bf u}_2, {\bf u}_3, \ldots, {\bf u}_p$
+are found by finding successive eigenvectors of $\widehat \Sigma$.
+
+
+\newpage
+__Some comments:__
+
+A new coordinate system is being constructed in which the
+$p$-dimensional data are represented. The center of this coordinate
+system is the sample mean of the data, but the axes are the
+principal components ${\bf u}_1, {\bf u}_2, \ldots, {\bf u}_p$.
+
+When expressed in this new coordinate system, each of the
+dimensions have sample correlation of zero.
+
+The amount of ``variance explained'' by each principal component
+is less than each of the previous principal components.
+
+\newpage
+
+In many situations, we will choose some cutoff $q \ll p$ such that
+we will only retain the first $q$ axes in our new coordinate system.
+This will be because these first $q$ components ``capture'' most of
+the variability in the data.
+
+For instance, in the toy example above, most of the variability in the
+data is "captured" by the first axis ${\bf u}_1$.
+
+In typical applications $p$ will be very large, and a low-dimensional
+representation will be of great value.
+
+\newpage
+
+#Back to the Yield Curves
+
+\vspace{-.2in}
+
+Our previous inspection of some yield curves suggested that these
+curves share a common shape, and that it does not require ten
+numbers to describe changes in this shape from day to day.
+
+This is an ideal situation to consider dimension reduction. The
+simplicity of the shapes of the curves suggests that PCA 
+is worth trying.
+
+For this analysis we will use the yield curves from 2010
+to the present. We need to extract the relevant rates to run
+the PCA. Note that there are 11 rates over this time period.
+
+```{r}
+YCrates = YCdata[YCdata$Date > "2010-01-01", -1]
+```
+
+\newpage
+
+There is one row that is filled with zeros:
+
+```{r}
+YCrates = YCrates[-which(apply(YCrates,1,sum) == 0),]
+```
+
+We want to characterize shifts in the yield curves, so
+we transform into the day-to-day change in the rates:
+
+```{r}
+YCshifts = apply(YCrates,2,diff)
+```
+
+The function `princomp()` runs the PCA. The `subset` argument is used
+to skip over the rows with NA.
+
+```{r}
+pcaout = princomp(YCshifts, 
+           subset=complete.cases(YCshifts))
+```
+
+\newpage
+The following output is useful:
+\normalsize
+```{r}
+summary(pcaout)
+```
+\Large
+
+This shows the proportion of variance explained by each component. 
+
+\newpage
+The first three
+components account for approximately 95% of the variability in the shifts in the
+yield curves.
+
+The actual components (directions) are called the \textcolor{red}{loadings}. Look at
+`pcaout$loadings` to see these vectors.
+The following plot shows the first three components/loadings.
+
+The interpretation is as follows: The day-to-day change in the yield curves can mostly
+be modelled as a linear combination of the three curves shown in this figure. The weight
+placed on each component (called the \textcolor{red}{score}) will change from day to day.
+
+\newpage
+
+```{r,fig.align="center",echo=FALSE}
+plot(pcaout$loadings[,1],xaxt="n",pch=16,type="b",xlab="Maturity",ylab="Rate Shift",lwd=2,ylim=c(-1,1))
+points(pcaout$loadings[,2],type="b",lwd=2,col="red",lty=2,pch=16)
+points(pcaout$loadings[,3],type="b",lwd=2,col="blue",lty=3,pch=16)
+legend("bottomright",legend=c("Component 1","Component 2","Component 3"), lty=c(1,2,3),
+       col=c("black","red","blue"),lwd=2)
+axis(1,1:11,names(YCrates),cex.axis=0.9)
+```
+
+```{r,include=FALSE,eval=FALSE}
+plot(maturities, pcaout$loadings[,1],xaxt="n",pch=16,type="b",xlab="Maturity",ylab="Rate Shift",lwd=2,ylim=c(-1,1))
+points(maturities,pcaout$loadings[,2],type="b",lwd=2,col="red",lty=2,pch=16)
+points(maturities,pcaout$loadings[,3],type="b",lwd=2,col="blue",lty=3,pch=16)
+legend("bottomright",legend=c("Component 1","Component 2","Component 3"), lty=c(1,2,3),
+       col=c("black","red","blue"),lwd=2)
+axis(1,maturities,names(YCrates),cex.axis=0.7)
+```
+
+\newpage
+
+The scores give a \textcolor{red}{representation} of the shifts in yield curves. In fact,
+this is related to a common way to characterize how the yield curve has changed. The first
+three components are commonly given the names "parallel shift," "twist," and "butterfly."
+
+![Figure from advisoranalyst.com](yield-curve_glossary.jpg){width=5in}
+
+\newpage
+The `predict()` function, when applied to the output of `princomp()` will return the
+position of yield curve shift in this new representation. Note that R is a little picky
+on the format. The new shift must come in as a data frame with column names
+the same as used in the data.
+
+\normalsize
+```{r}
+newshift = matrix(c(0.00, 0.00, 0.01, 0.01, 0.01, 0.07, 0.05, 0.05, 
+                     0.03, 0.03, 0.04), nrow = 1)
+newshift = data.frame(newshift)
+names(newshift) = colnames(YCshifts)
+predict(pcaout, newshift)
+```
+\Large
+
+\newpage
+#Scaling Variables for PCA
+
+\vspace{-.2in}
+
+In cases where the variables being incorporated into PCA are on
+different scales, it is crucial that the variables be standardized
+prior to the analysis. It is customary to scale variables so that
+each has sample mean of zero, and sample variance of one.
+
+This is equivalent to finding the eigenvectors of the correlation
+matrix instead of the covariance matrix. In fact, with function
+`princomp()`, one can simply use argument `cor = T` to achieve this.
+
+
+
+
+
+\newpage
+
+#Nonlinear Dimension Reduction
+
+\vspace{-.2in}
+Consider the figure on the following slide.
+In this case, an individual "observation" is an image of
+a face. These faces are mapped into a two-dimensional space.
+The faces along the bottom show how the faces evolve along
+the line in the upper right of the figure.
+
+This illustrates the use of \textcolor{red}{nonlinear dimension
+reduction} on high-dimensional data. PCA would not have been
+a good choice in this case because individual images cannot be
+approximated by a linear combination of a "basis" faces.
+
+\newpage
+
+![From Roweis and Saul (2000), _Science_](faceex1.png){width=4.5in}
+
+\newpage
+
+__Exercise:__ What is the utility of the representation shown
+in the previous figure?
+
+\answerlines{7}
+
+
+\newpage
+
+#Multidimensional Scaling
+
+Consider a synthetic case in which we have four points in
+two-dimensions, labelled as in the following figure.
+
+```{r,echo=FALSE,fig.align="center",fig.width=4,fig.height=4}
+pts = matrix(c(0,1,0,2,3,3,0,0),nrow=4)
+mdsout = cmdscale(dist(pts))
+plot(pts[,1],pts[,2],pch=16,xlab=expression(X[1]),ylab=expression(X[2]),
+     xaxt="n",yaxt="n",xlim=c(-0.2,3.2),ylim=c(-0.2,3.2),pty="s",bty="L")
+axis(1,c(0,1,2,3))
+axis(2,c(0,1,2,3))
+text(pts[1:2,1],pts[1:2,2],c("A","B"),pos=1)
+text(pts[3:4,1],pts[3:4,2],c("C","D"),pos=3)
+```
+
+\newpage
+Imagine calculating all of the pairwise distances between the
+four points shown in the above figure.
+
+Then ask: __What one-dimensional representation of the data
+preserves those distances to the greatest extent possible?__
+
+The answer is addressed by \textcolor{red}{multidimensional
+scaling (MDS)}.
+
+The result, using the classic approach, is shown in the figure below.
+
+\vspace{.2in}
+
+```{r,echo=FALSE,fig.align="center",fig.height=2.5}
+plot(mdsout[,1], rep(0,4), pch=16,yaxt="n",ylab="",
+     xlab=expression(U[1]),bty="n",xaxt="n",xlim=c(-2,2))
+axis(1,c(-2,-1,0,1,2),cex.axis=0.9)
+text(mdsout[,1],rep(0,4),c("A","B","C","D"),pos=3)
+text(mdsout[,1],rep(0,4),round(mdsout[,1],2),pos=1,cex=0.5)
+abline(0,0)
+```
+\newpage
+
+__Exercise:__ What is the practical motivation behind trying to find a low-dimensional
+representation that preserves distances?
+
+\answerlines{7}
+
+\newpage
+
+In R, classic multidimensional scaling is implemented through function
+`cmdscale()`. 
+
+Note in the example below how the `dist()` function
+is used in conjunction with `cmdscale()`. The argument `k` controls
+how many dimensions should be returned.
+
+\large
+```{r}
+mdsout = cmdscale(
+  dist(YCshifts[complete.cases(YCshifts),]), k=2)
+```
+\Large
+
+In this example, each "observation" is a single shift in the yield
+curve. We calculate the distances between all pairs of yield
+curves, and then seek the two-dimensional mapping that preserves these
+distances to the extent possible.
+
+\newpage
+
+__Exercise:__ Compare the results from multidimensional scaling to those
+found using PCA. What conclusion can you draw?
+
+\answerlines{7}
+
+\newpage
+
+The criterion minimized by MDS can be written as follows:
+\[
+\mbox{Stress}\!\left(x_1, x_2, \ldots, x_n\right) = \left(\sum_{i \neq j} \left(d_{ij} - \Delta\!\left(x_i, x_j\right)\right)^2\right)^{1/2}
+\]
+where $d_{ij}$ is the "true" distance between observations $i$ and $j$,
+and $\Delta(x_i, x_j)$ is the distance in the lower-dimensional mapping.
+
+Although in "classical" MDS the distances utilized are Euclidean, the general
+concept of "metric" MDS can use any distance $d_{ij}$ which is a properly
+defined distance metric.
+
+
+\newpage
+
+```{r,echo=FALSE}
+generfromspiral=function(n,maxt,errsd=0,a=0,b=1/(2*pi))
+{
+  t = runif(n,0,maxt)
+  r = a+b*t
+  x = r * cos(t)
+  y = r * sin(t)
+  if(errsd>0)
+  {
+    x = x + rnorm(n,0,errsd)
+    y = y + rnorm(n,0,errsd)
+  }
+  cbind(x,y,t)
+}
+
+set.seed(0)
+spiraldat = data.frame(generfromspiral(2000,6*pi,errsd=0.075))
+```
+
+Consider a synthetic data set where points lie on a spiral:
+```{r,echo=FALSE,fig.align="center",fig.width=5,fig.height=4}
+ggplot(spiraldat,aes(x=x,y=y,color=t))+geom_point(size=0.5) + scale_color_continuous(low="red",high="blue") +
+  labs(x=expression(X[1]),y=expression(X[2]),color="Spiral")
+```
+\newpage
+__Exercise:__ Does Euclidean distance provide a meaningful measure of "dissimilarity"
+for the data depicted in the spiral example? 
+
+\answerlines{8}
+
+\newpage
+Some approaches to dimension reduction attempt to construct an improved
+measure of "distance" or "dissimilarity" and incorporate that into metric
+MDS. The above spiral example is a (classic) illustration of why that can be
+necessary. (Imagine drawing a new pair of axes onto the spiral example.
+Can you find any axis system that will yield a useful representation of the
+data?)
+
+Consider the following observation: Although Euclidean distance is not
+a useful __global__ measure of dissimilarity, it is useful on __local__ scales.
+In other words, Euclidean distance could be used to identify two observations
+which are very similar.
+
+\newpage
+
+#ISOMAP
+
+\vspace{-.2in}
+\textcolor{red}{Isomap} is
+an approach to nonlinear dimension reduction built on MDS with
+a well-chosen \textcolor{red}{geodesic distance} between points. The steps:
+
+1. __Connect all "neighboring" observations.__ This can be achieved
+by finding all observations within distance $\epsilon$ or by find the $K$ nearest
+neighbors of each observation.
+
+2. __Assign weights to connected observations.__ The weight is equal to
+the Eucldean distance separating them.
+
+3. __Calculate the geodesic distance between all pairs of points.__ The shortest path between points using the provided weights.
+
+4. __Use MDS on the resulting distance matrix.__
+
+
+\newpage
+
+The following slides show the result of applying the Isomap algorithm to
+the spiral example.
+
+In this case $K=10$ is utilized. Note that choosing $K$ too small creates the
+risk of having a "fragmented" graph in which there are observations with no
+connecting path.
+
+The first graph shows the new two-dimensional representation created by Isomap.
+The color indicates the position along the spiral. We observe that $U_1$ 
+maps well to the spiral position.
+
+This is confirmed by the following plot. Note that there is no reason to
+expect or prefer that there be a linear relationship between $U_1$ and the
+spiral position. The strictly monotonic relationship is sufficient.
+
+
+\newpage
+
+
+```{r,echo=FALSE,fig.align="center"}
+#spiraliso = isomap(dist(spiraldat[,1:2]),ndim=2,k=10)
+load("spiraliso.Robj")
+
+spiraldat = cbind(spiraldat, spiraliso$points)
+ggplot(spiraldat, aes(x=spiraldat[,4],y=spiraldat[,5],color=spiraldat$t)) +
+  geom_point(size=0.5) + scale_color_continuous(low="red",high="blue") +
+  labs(x=expression(U[1]),y=expression(U[2]),color="Spiral")
+
+ggplot(spiraldat, aes(x=spiraldat[,4],y=spiraldat[,3],color=spiraldat$t)) +
+  geom_point(size=0.5) + scale_color_continuous(low="red",high="blue") +
+  labs(x=expression(U[1]),y="Spiral",color="Spiral")
+
+```
+
+
+\newpage
+
+#Stock Example
+
+In this example we will consider a sample of 1000 randomly chosen
+NYSE stocks. For each, a time series of their closing price is
+obtained, covering 30 trading days from August 18, 2017 to September
+29, 2017.
+
+Read in the data:
+\large
+```{r}
+stocksample = read.table("stocksample.txt", header=T,
+                sep="\t", comment.char="")
+```
+\Large
+
+Scale each time series to have mean zero
+and variance one, so that they can be fairly compared.
+
+\large
+```{r}
+stocksamplescl = apply(stocksample[,5:34],1,scale)
+```
+\Large
+
+
+\newpage
+Construct a distance matrix between the time series, and then
+run the Isomap procedure with $k=5$:
+
+\large
+```{r}
+stockdistmat = dist(t(stocksamplescl))
+isooutstocks = isomap(stockdistmat, k=5)
+stocksample = cbind(stocksample, isooutstocks$points[,1:5])
+```
+\Large
+
+Now create a plot looking at the first two dimensions, coloring
+the points by sector:
+\large
+```{r}
+ggplot(stocksample, aes(x=stocksample[,35],y=stocksample[,36],
+                    color=sector)) + geom_point() +
+  labs(x=expression(U[1]), y=expression(U[2]), color="Sector")
+```
+\Large
+
+\newpage
+__Exercise:__ Consider the following R commands. Use this to explore the structure
+found in this low-dimensional representation. Can you find a relationship between
+position in this two-dimensional space and shape of the time series?
+
+```{r,eval=FALSE}
+plot(stocksample[,35],stocksample[,36],pch=16)
+identify(stocksample[,35],stocksample[,36])
+```
+
+
+\answerlines{5}
+
+\newpage
+
+#Diffusion Map
+
+\vspace{-.2in}
+
+A criticism of Isomap is that it is computationally intensive
+to calculate the geodesic distances. Also, Isomap
+is not as robust to noise in the data as are some other approaches, including
+the one described next, \textcolor{red}{diffusion map}.
+
+This approach is again built on MDS, but the underlying distance between
+pairs of points is calculated from \textcolor{red}{random walks}
+constructed on the observed data. Steps in this random walk are taken from
+observation to observation based on proximity in Euclidean distance (typically),
+but only neighbors at short distances are candidates for stepping to.
+
+If the random walk "diffuses" over enough steps, the result
+is a \textcolor{red}{distribution} over the observations. Comparing
+distributions between different starting points gives a natural measure of global
+proximity.
+
+\newpage
+
+The figure on the next slide illustrates the idea. 
+
+Two observations
+in the data set are marked with "X." For either X, imagine a
+random walk that takes ten steps away from that observation. Steps
+are small, i.e., the probability of stepping to an observation
+decreases rapidly as a function of its distance from the current
+position in the walk.
+
+The ending position of the random walk is, of course, random. The shading
+shows the probability that the random walk ends at various observations.
+
+The dissimilarity of these distributions is a natural way of quantifying the
+distance between them.
+
+\newpage
+
+```{r,echo=FALSE,fig.align="center",fig.width=5.5,fig.height=4}
+spiraldist = as.matrix(dist(spiraldat[,1:2]))
+transmat = exp(-(spiraldist^2)/0.05)
+transmat = sweep(transmat, 1, apply(transmat,1,sum), FUN = "/")
+pt1 = 1
+pt2 = 2
+pstep = transmat %*% transmat %*% transmat %*% transmat %*% transmat
+pstep = pstep %*% pstep
+
+spiraldat$Dist1 = pstep[pt1,]
+spiraldat$Dist2 = pstep[pt2,]
+spiraldat$combDist = pmax(spiraldat$Dist1,spiraldat$Dist2)
+
+ggplot(spiraldat,aes(x=x,y=y,color=combDist))+geom_point() +
+  geom_point(aes(x=x[pt1],y=y[pt1]),col="red",shape=4,size=5) +
+  geom_point(aes(x=x[pt2],y=y[pt2]),col="red",shape=4,size=5) +
+  labs(x=expression(X[1]),y=expression(X[2]),color="Probability") +
+  scale_color_continuous(low="white",high="black")
+```
+
+\newpage
+#Technical Details on Diffusion Map
+
+\vspace{-.2in}
+
+The process starts by constructing a \textcolor{red}{similarity measure}
+between pairs of observations. There is some flexibility in how this
+is done, but a standard approach is quantify the similarity between
+observations $i$ and $j$ as
+\[
+s_{ij} = \exp(-\| {\bf x}_i - {\bf x}_j\|^2/\epsilon)
+\]
+where $\epsilon$ is a tuning parameter.
+
+Next, the probability of stepping from observation $i$ to any
+ other observation $j$ is
+ \[
+p_{ij} = s_{ij} \bigg/ \sum_k s_{ik}
+ \]
+Note that this scaling will force $\sum_j p_{ij} = 1$.
+
+This completely defines the behaviour of the random walk.
+
+\newpage
+
+The choice of $\epsilon$ is crucial. If it is chosen too small, then steps
+of the random walk will likely move only to other observations which
+are very similar, and, in particular, remain at the same observation.
+(A "step" can be to the same observation.)
+
+If $\epsilon$ is chosen too large, then it will be possible to
+step to observations which are actually quite dissimilar, and the
+result will be a mapping that does not adhere to the lower dimensional
+structure of interest.
+
+There is no "right" choice of $\epsilon$. Ultimately, different
+values should be tried, and the chosen value should be that which
+yields a useful low-dimensional representation.
+
+
+\newpage
+
+The slides on the next page show the results when running
+diffusion map on the spiral example.
+
+In this case, $\epsilon = 0.05$, and 10-step random walks
+are utilized.
+
+The random walk is much more robust to noise in the data
+than is the geodesic distance. One way to see this is to
+note that small perturbations in the position of any
+observation will have very little effect on the diffusion
+distances, but could potentially affect geodesic distances
+a great deal.
+
+Also, there are computational shortcuts that make calculating
+the diffusion map quick. Much of this is based on the theory
+of \textcolor{red}{Markov chains}.
+
+
+
+\newpage
+
+```{r,echo=FALSE,fig.align="center",message=FALSE,warning=FALSE,results="hide"}
+library(diffusionMap)
+spiraldiffmap = diffuse(dist(spiraldat[,1:2]), eps.val=0.05, t=10)
+spiraldat$dmap1 = spiraldiffmap$X[,1]
+spiraldat$dmap2 = spiraldiffmap$X[,2]
+
+ggplot(spiraldat, aes(x=dmap1,y=dmap2,color=t)) +
+  geom_point(size=0.5) + scale_color_continuous(low="red",high="blue") +
+  labs(x="First Diffusion Coordinate",
+       y="Second Diffusion Coordinate",color="Spiral")
+
+ggplot(spiraldat, aes(x=dmap1,y=t,color=t)) +
+  geom_point(size=0.5) + scale_color_continuous(low="red",high="blue") +
+  labs(x="First Diffusion Coordinate",y="Spiral",color="Spiral")
+```
+
+\newpage
+#Return to the Stock Example
+
+\vspace{-.2in}
+
+Diffusion map is implemented in the package `diffusionMap`
+via the function `diffuse()`. The arguments `eps.val` and `t`
+set the values of $\epsilon$ and the length of the random
+walk, respectively.
+
+\large
+```{r,results="hide"}
+stockdiffmap = diffuse(stockdistmat, eps.val=50, t=10)
+```
+\Large
+The component `X` of the output contains the coordinates in
+diffusion space.
+
+\large
+```{r}
+stocksample$dmap1 = stockdiffmap$X[,1]
+stocksample$dmap2 = stockdiffmap$X[,2]
+```
+\Large
+
+```{r,echo=FALSE, }
+ggplot(stocksample, aes(x=dmap1,y=dmap2,color=sector)) + geom_point() +
+  labs(x="First Diffusion Coordinate", y="Second Diffusion Coordinate",
+       color="Sector")
+```
+
+\newpage
+
+__Exercise:__ Again, explore the space to see how the shape of the
+time series varies over diffusion space.
+
+\answerlines{8}
+
+
+\newpage
+
+#The Options Example
+
+\vspace{-.2in}
+
+Let's now revisit the options sample previously described, and look at
+the four quantities that we would consider as "predictors" in a model
+for the price.
+
+\large
+```{r}
+optionsdatasub = optionsdata[,c(2,3,9,10)]
+```
+\Large
+
+To construct a distance metric in this case, we need to adjust
+for the fact that the four variables are not comparable. Here, 
+we introduce the \textcolor{red}{Mahalanobis Distance} as a
+useful approach. The distance between two vectors ${\bf x}_1$ and
+${\bf x}_2$ is
+\[
+\left({\bf x}_i - {\bf x}_j\right)^T \widehat \Sigma^{-1}\!\left({\bf x}_i - {\bf x}_j\right)
+\]
+where $\widehat \Sigma$ is the sample covariance matrix of the ${\bf x}$'s.
+
+\newpage
+__Exercise:__ Explain why the weighting by the inverse covariance matrix
+is a good approach.
+
+\answerlines{7}
+
+\newpage
+We can calculate the Mahalanobis distances as follows, using the
+function `distances()` from the package of the same name:
+
+\large
+```{r}
+optdist = distance_matrix(distances(optionsdatasub,
+                          normalize="mahalanobize"))
+```
+\Large
+
+Note that the function `distance_matrix()` extracts the distance
+matrix from the output of `distances()`.
+
+Now we use Isomap and store the mappings:
+
+\large
+```{r}
+optiso = isomap(optdist,k=10)
+optionsdata$iso1 = optiso$points[,1]
+optionsdata$iso2 = optiso$points[,2]
+optionsdata$iso3 = optiso$points[,3]
+```
+\Large
+
+
+\newpage
+__Exercise:__ Construct plots to compare the Isomap-constructed representation with
+the four input quantities, and also with the ask price. Be sure to look at the
+following plot:
+
+\large
+```{r,eval=FALSE}
+ggplot(optionsdata, aes(x=iso1,y=iso3,color=log10(ask))) + 
+  geom_point(size=1) + 
+  scale_color_continuous(low="blue",high="red") +
+  labs(x=expression(U[1]), y=expression(U[2]), color="Log Ask")
+```
+
+\Large
+\answerlines{5}
+
+

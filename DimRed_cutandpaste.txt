@@ -1,0 +1,204 @@
+library(ggplot2)
+library(rvest)
+library(vegan)
+library(distances)
+
+
+------------------------------------------------------------------------
+Slide 5:
+
+optionsdata = read.table("optionssample09302017.txt", 
+                         header=T, sep=",")
+optionsdata$bserr = optionsdata$bsval - optionsdata$ask
+
+holdlo2d = loess(bserr ~ timetoexpiry + strike, 
+                 data=optionsdata, degree=1)
+
+
+fullgrid = expand.grid(
+  timetoexpiry=
+    seq(min(optionsdata$timetoexpiry),
+        max(optionsdata$timetoexpiry),length=20),
+  strike=seq(min(optionsdata$strike),
+             max(optionsdata$strike),length=20))
+
+
+------------------------------------------------------------------------
+Slide 6:
+
+fits = predict(holdlo2d,newdata=as.matrix(fullgrid))
+
+fitframe = data.frame(cbind(fullgrid,fits))
+
+ggplot(fitframe, aes(x=timetoexpiry,y=strike,z=fits)) +
+  geom_contour(aes(color=..level..)) +
+  scale_color_gradient2(low="blue", high="red", 
+                        mid="yellow",midpoint=0) +
+  labs(x="Time to Expiration (days)", y="Strike Price",
+       color="Error")
+
+
+------------------------------------------------------------------------
+Slide 19:
+
+fullYCweb = read_html("https://goo.gl/j97141")
+
+
+------------------------------------------------------------------------
+Slide 21:
+
+tvdnodes = html_nodes(fullYCweb, ".text_view_data")
+
+
+------------------------------------------------------------------------
+Slide 22:
+
+tableelements = html_text(tvdnodes)
+print(tableelements[1:10])
+
+
+------------------------------------------------------------------------
+Slide 23:
+
+tableelements[grep("N/A", tableelements)] = NA
+
+
+------------------------------------------------------------------------
+Slide 24:
+
+YCdata = matrix(tableelements, ncol=12,byrow=TRUE)
+YCdata = data.frame(YCdata, stringsAsFactors=FALSE)
+names(YCdata) = c("Date","1mo","3mo","6mo","1yr",
+                "2yr","3yr","5yr","7yr","10yr",
+                "20yr","30yr")
+YCdata$Date = as.Date(YCdata$Date,format="%m/%d/%y")
+YCdata[,2:12] = apply(YCdata[,2:12],2,as.numeric)
+
+
+------------------------------------------------------------------------
+Slide 25:
+
+set.seed(0)
+
+library(reshape2)
+YCmelt = melt(YCdata, id.vars="Date")
+maturities = c(1/12,3/12,6/12,1,2,3,5,7,10,20,30)
+YCmelt$maturity = 
+    maturities[as.integer(YCmelt$variable)]
+YCmeltsub = 
+    YCmelt[YCmelt$Date %in% sample(YCmelt$Date, size=10), ]
+ggplot(YCmeltsub, aes(x=maturity,y=value,
+        color=factor(Date))) + 
+  geom_line() +
+  labs(x="Maturity (years)", y="Rate (%)", color="Date")
+
+
+------------------------------------------------------------------------
+Slide 35:
+
+YCrates = YCdata[YCdata$Date > "2010-01-01", -1]
+
+
+------------------------------------------------------------------------
+Slide 36:
+
+YCrates = YCrates[-which(apply(YCrates,1,sum) == 0),]
+
+YCshifts = apply(YCrates,2,diff)
+
+pcaout = princomp(YCshifts, 
+           subset=complete.cases(YCshifts))
+
+
+------------------------------------------------------------------------
+Slide 41:
+
+newshift = matrix(c(0.00, 0.00, 0.01, 0.01, 0.01, 0.07, 0.05, 0.05, 
+                     0.03, 0.03, 0.04), nrow = 1)
+newshift = data.frame(newshift)
+names(newshift) = colnames(YCshifts)
+predict(pcaout, newshift)
+
+
+
+
+------------------------------------------------------------------------
+Slide 49:
+
+mdsout = cmdscale(
+  dist(YCshifts[complete.cases(YCshifts),]), k=2)
+
+
+
+------------------------------------------------------------------------
+Slide 59:
+
+stocksample = read.table("stocksample.txt", header=T,
+                sep="\t", comment.char="")
+
+
+stocksamplescl = apply(stocksample[,5:34],1,scale)
+
+
+------------------------------------------------------------------------
+Slide 60:
+
+stockdistmat = dist(t(stocksamplescl))
+isooutstocks = isomap(stockdistmat, k=5)
+stocksample = cbind(stocksample, isooutstocks$points[,1:5])
+
+ggplot(stocksample, aes(x=stocksample[,35],y=stocksample[,36],
+                    color=sector)) + geom_point() +
+  labs(x=expression(U[1]), y=expression(U[2]), color="Sector")
+
+
+------------------------------------------------------------------------
+Slide 62:
+
+plot(stocksample[,35],stocksample[,36],pch=16)
+identify(stocksample[,35],stocksample[,36])
+
+
+
+------------------------------------------------------------------------
+Slide 71:
+
+stockdiffmap = diffuse(stockdistmat, eps.val=50, t=10)
+
+stocksample$dmap1 = stockdiffmap$X[,1]
+stocksample$dmap2 = stockdiffmap$X[,2]
+
+
+------------------------------------------------------------------------
+Slide 72:
+
+ggplot(stocksample, aes(x=dmap1,y=dmap2,color=sector)) + geom_point() +
+  labs(x="First Diffusion Coordinate", y="Second Diffusion Coordinate",
+       color="Sector")
+
+------------------------------------------------------------------------
+Slide 74:
+
+optionsdatasub = optionsdata[,c(2,3,9,10)]
+
+------------------------------------------------------------------------
+Slide 76:
+
+optdist = distance_matrix(distances(optionsdatasub,
+                          normalize="mahalanobize"))
+
+optiso = isomap(optdist,k=10)
+optionsdata$iso1 = optiso$points[,1]
+optionsdata$iso2 = optiso$points[,2]
+optionsdata$iso3 = optiso$points[,3]
+
+
+------------------------------------------------------------------------
+Slide 77:
+
+ggplot(optionsdata, aes(x=iso1,y=iso2,color=log10(ask))) + 
+  geom_point(size=1) + 
+  scale_color_continuous(low="blue",high="red") +
+  labs(x=expression(U[1]), y=expression(U[2]), color="Log Ask")
+
+
