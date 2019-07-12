@@ -1,0 +1,504 @@
+---
+output:
+  pdf_document:
+    highlight: default
+urlcolor: blue
+geometry:
+- margin=1in
+- paperheight=6.5in
+- paperwidth=8.5in
+header-includes:
+- \usepackage{fancyhdr}
+- \fancyhead{}
+- \fancyfoot{}
+- \chead{Clustering}
+- \lhead{Lecture Notes for FDS}
+- \rhead{\footnotesize Slide \thepage}
+- \pagestyle{fancy}
+- \parindent=0in
+- \renewcommand{\baselinestretch}{1.3}
+- \usepackage{palatino}
+- \usepackage{color}
+- \usepackage [pagewise, mathlines, displaymath]{lineno}
+- \input defs.tex
+- \parskip 0.15in
+fontsize: 11pt
+#fontfamily: mathpazo
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+library(ggplot2)
+library(vegan)
+library(diffusionMap)
+knitr::opts_chunk$set(echo = TRUE, comment="", prompt=TRUE)
+hook1 <- function(x){ gsub("```\n*```r*\n*", "", x) }
+hook2 <- function(x){ gsub("```\n+```\n", "", x) }
+knit_hooks$set(document = hook2)
+setwd("~/Teaching/MSCF/DScourses/LectureNotes/Part9_Clustering")
+```
+
+
+\thispagestyle{fancy}
+\linenumbers
+\Large
+
+\Huge
+{\bf Part 9: Clustering}
+\Large
+
+#Summary
+
+\vspace{-.2in}
+
+Here, we will focus on the general problem of \textcolor{red}{clustering}, the challenge of dividing
+objects into $K$ groups such that similar objects are assigned to the same group.
+
+
+
+
+\newpage
+
+#Why Cluster?
+
+\vspace{-.2in}
+
+Making predictions is a very natural problem; most people can understand
+why it is useful to study methods for supervised learning. Applications for
+unsupervised learning can be less obvious.
+
+There can be distinct groups present in data sets. This grouping can provide
+insight into the structure of the data, and guide further analyses (in the
+same way that stocks in different ``sectors'' may be best modeled separately).
+
+Clustering can also help in the identification of outliers.
+
+The following examples are from finance. Note that I am not making any claims
+as to the legitimacy and/or accuracy of their analyses; I am just providing
+examples of 
+ways in which clustering techniques could be used.
+
+
+\newpage
+
+__Pavlidis, et al. (2006):__ "Financial Forecasting through Unsupervised
+Clustering and Neural Networks," _Operational Research_.
+
+The authors use clustering to divide the predictor space into regions of
+greater homogeniety, and fit distinct (neural network) models in each of these.
+
+"Although global approximation methods can be applied to model and
+forecast time series $\ldots$, it is reasonable to expect that forecasting
+accuracy can be improved if regions of the input space exhibiting similar
+dynamics are identified and subsequently a local model is constructed for
+each of them."
+
+
+\newpage
+__Lee, et al. (2010):__ "An Effective Clustering Approach to Stock Market
+Prediction," _PACIS 2010 Proceedings_
+
+The authors use clustering to divide the financial reports into 
+homogeneous groups, and then take the cluster center as a "representative."
+
+"When a financial report is released, we will transform it into a feature vector $\ldots$
+[and] we assign [it] to the nearest representative feature vector. Then, we predict the
+direction of the stock price movement according to the class label of the nearest
+representative feature vector."
+
+In this framework, the clustering serves as a "smoothing" operation on 
+"nonstandard"
+data (the financial report).
+
+![From Lee, et al. (2010)](Lee.png)
+
+\newpage
+
+__Miceli and Susinno (2003):__ "Using Trees to Grow Money," _Risk_
+
+The authors cluster hedge fund performance time
+series in order to "visualize a taxonomy embedded in synchronous historical
+data." They state that "[i]n a universe with low transparency from an investor's
+point of view, and where operating strategies are protected from full disclosure $\ldots$
+instruments of classification $\ldots$ would allow the investor to verify the declared
+strategies in the statements issued by hedge funds. In particular, nodes anomolous
+to a reference cluster help to identify funds that require a deeper investigation."
+
+![From Miceli and Susinno (2003)](Miceli.png)
+
+
+\newpage
+
+__Das (2003):__ "Hedge Fund Classification using K-means Clustering Method,"
+_9th International Conference on Computing in Economics and Finance_.
+
+The author proposes using clustering as a means of categorizing hedge funds,
+hence improving on the existing "myriad of classifications, some overlapping and
+some mutually exclusive."
+
+\vspace{.4in}
+__Craighead and Klemesrud (2002):__ "Stock Selection Based on Cluster and
+Outlier Analysis," Nationwide Financial, Columbus, OH.
+
+The authors use clustering to identify outliers that could potentially 
+create problems with portfolio selection algorithms. 
+
+\newpage
+
+#K-Means Clustering
+
+\vspace{-.2in}
+
+The \textcolor{red}{K-means clustering algorithm} is a relatively simple
+and intuitive approach to dividing the sample ${\bf x}_1, {\bf x}_2,
+\ldots, {\bf x}_n$ into $K$ distinct groups.
+
+Despite repeated extensions and enhancements of the method and the growth
+of other clustering methods, K-means remains popular and useful.
+
+The algorithm is based on a very natural measure of within-cluster heterogeneity.
+Observations are assigned to clusters in an effort to minimize this measure.
+
+It is assumed that $K$ is fixed by the user; the choice of $K$ is a tricky issue.
+
+I will adopt the notation used by ISL, Section 10.3.1.
+
+\newpage
+
+First, define $C_k$ to be the set of indices that belong to cluster $k$, for $k=1,2,\ldots,K$. 
+
+Each observation is assigned to exactly one cluster. In other
+words, $C_k \subseteq \{1,2,\ldots, n\}$ with
+\[
+   \bigcup_{k=1}^K C_k = \{1,2,\ldots,n\} \:\:\: \mbox{and $\:C_k, C_{\ell}$ disjoint for $k \neq \ell$}.
+\]
+
+With K-means, the similarity within cluster $k$ is measured by
+\LARGE
+\[
+   W(C_k) 
+%= \frac{1}{|C_k|} \sum_{i, i' \in C_k} \sum_{j=1}^p \left(x_{ij}- x_{i'\!j}\right)^2
+   = \sum_{i \in C_k} \sum_{j=1}^p \left(x_{ij}- \overline x_{kj}\right)^2
+\]
+\Large
+where 
+${\bf x}_i = (x_{i\one}, x_{i\two}, \ldots, x_{ip})$ and
+$\overline {\bf x}_k$ is the cluster 
+\textcolor{red}{centroid}, calculated as the sample mean of
+the cluster members.
+
+
+\newpage
+
+__Exercise:__ Under what circumstance(s) will $W(C_k)$ be small?
+
+\answerlines{8}
+
+\newpage
+K-means clustering seeks to find the allocation of the observations that minimizes
+\[
+   \sum_{k=1}^K W(C_k)
+\]
+
+Comparing every possible allocation is not realistic. (Note that there is no restriction
+on the sizes of the clusters.)
+
+Instead, the following algorithm is utilized: (Algorithm 10.1 in ISL.)
+
+Randomly assign a number from 1 to $K$ to each fo the observations. These are the
+initial cluster assignments. Then repeat until no changes are made to cluster assignments:
+
+1. Find the centroid for each of the $K$ clusters.
+2. Re-assign each observation to the cluster whose centroid is closest as measured
+by Euclidean distance.
+
+
+\newpage
+__Comment:__
+Note that the criterion is guaranteed to not increase with each iteration of the
+algorithm, but the search could get caught in a local minimum (and not the global
+minimum).
+
+To address this problem, it is standard to repeat the algorithm several times
+with different (randomly chosen) starting allocations. If you keep track of the
+criterion achieved from each repetition, you can easily determine which allocation
+is the best.
+
+\newpage
+#K-means in R
+
+\vspace{-.2in}
+
+K-means is implemented in R using the function `kmeans()`.
+
+The syntax is simple:
+
+```{r,eval=FALSE}
+kmout = kmeans(datamat, centers = 5, nstart = 10)
+```
+
+Here I have specified that I want $K=5$ clusters, and that I want
+the basic algorithm repeated ten times in order to increase the
+chances of finding the global minimum.
+
+Note that `datamat` must be formatted so that each of the
+vectors to be clustered are stored in its `rows`. Use the
+transpose function `t()`, if needed.
+
+\newpage
+#Example: Clustering Stock Time Series
+
+\vspace{-.2in}
+
+In this example, we will cluster our data set of random-chosen
+NYSE stocks, with data taken from August 18, 2017 to September
+29, 2017.
+This is a total of 30 trading days.
+
+The data can be read in using the command
+
+\large
+```{r}
+stocksample = read.table("stocksample.txt", header=T,
+                sep="\t", comment.char="")
+
+stocksamplescl = apply(stocksample[,5:34],1,scale)
+```
+\Large
+
+
+\Large
+Note that the data are formatted such that each row is a different
+stock; the columns are the different days. As before, each time series has
+been scaled so that it has a mean of zero and variance of one. It would
+be difficult to compare the series without this transformation.
+
+\newpage
+The call to `kmeans()` is below. The matrix needs to be transposed:
+
+```{r}
+kmout = kmeans(t(stocksamplescl), centers = 10, 
+      nstart = 10)
+```
+
+\Large
+Some comments on the output of `kmeans()`:
+
+1. The rows of `kmout$centers` holds the centers of the $K$
+clusters. In our example, each center is a vector of length 30.
+
+2. `kmout$cluster` specifies the cluster that each of the
+observations has been assigned to.
+
+3. The value of $W(C_k)$ for each of the clusters can be found
+from `kmout$withinss`.
+
+4. The size of each cluster is found from `kmout$size`.
+
+
+\newpage
+
+We can inspect how the clusters vary with respect to sector:
+
+\large
+```{r,fig.align="center"}
+stocksample$kmclust = factor(kmout$cluster)
+
+ggplot(stocksample, aes(x=kmclust,fill=sector)) + 
+  geom_bar() +
+  labs(x="Cluster",y="Count", fill="Sector")
+```
+\Large
+
+It is also interesting to compare K-means with the output of a
+dimension reduction technique seen previously:
+
+\large
+```{r, fig.align="center", results="hide"}
+stockdistmat = dist(t(stocksamplescl))
+stockdiffmap = diffuse(stockdistmat, eps.val=50, t=10)
+stocksample$dmap1 = stockdiffmap$X[,1]
+stocksample$dmap2 = stockdiffmap$X[,2]
+
+ggplot(stocksample,aes(x=dmap1,y=dmap2,color=kmclust)) + 
+  geom_point() +
+  labs(x="First Diffusion Coordinate", 
+       y="Second Diffusion Coordinate", color="Cluster")
+```
+\Large
+
+\newpage
+
+__Exercise:__ Would it seem sensible to run K-means directly on the low-dimensional
+representation, e.g., on the diffusion
+coordinates?
+
+\answerlines{7}
+
+
+\newpage
+
+#Hierarchical Clustering
+
+\vspace{-.2in}
+
+Another class of clustering procedures, called \textcolor{red}{hierarchical clustering},
+are characterized by the distinctive \textcolor{red}{dendrograms}
+they create to depict the relationships between observations.
+
+An appealing feature of these methods is that the creation of the dendrogram
+does not require the specification of the number of clusters.
+Sometimes, the dendrogram
+my reveal an "obvious" division among the observations, and hence suggest
+the number of clusters needed.
+
+This clustering method allows the user to specify a measure
+of dissimilarity. Often, Euclidean distance is
+used (just as in K-means).
+
+
+\newpage
+It is useful to begin by understanding how to interpret the dendrogram.
+An example is given below.
+
+```{r,echo=FALSE,fig.align="center",fig.height=5}
+set.seed(0)
+x = rnorm(10, c(0,0,0,0,0,5,5,5,7,7), sd = 0.5)
+
+plot(hclust(dist(x)),xlab="",sub="")
+```
+
+\newpage
+
+Observations which are similar are "linked" at a low height in
+the dendrogram. For instance, to link observations 6 and 7, you need only
+go up to a height of approximately 0.5. These two observations are quite
+similar. But, in order to link observations 2 and 10, you need to go to a
+height of over 8. These are quite dissimilar. 
+
+The units for "height" match the units of the dissimilarity metric that
+the user provides.
+
+__Exercise:__ Which pair are more similar: 8 and 6,
+or 9 and 10?
+
+\answerlines{2}
+
+\newpage
+
+Clusters can be formed by "cutting" the dendrogram at a user-chosen height. It may
+seem "clear" by looking at the dendrogram that cutting at around a height of 3 would
+be a good choice. The results is three clusters.
+
+Note that in this case I generated the ten observations from the normal distribution
+with a standard deviation of 0.5. The mean for observations 1 thru 5 was 0, for observations
+6 thru 8 was 5, and for observations 9 and 10 was 7. This explains the structure in the
+dendrogram.
+
+\newpage
+#Building the Dendrogram
+
+\vspace{-.2in}
+
+The process of constructing the dendrogram is quite intuitive.
+
+First, the two observations which are the most similar (as measured by the
+chosen dissimilarity metric) and joined together, at a height equal to their
+dissimilarity. In our example above, observations 1 and 4 were the first to
+be joined, at a height very close to zero.
+
+This process then continues, with the most similar objects joined together
+at the appropriate height. __But:__ Once observations are joined, they are
+__treated as a unit__ from that point on. For instance, in the second step
+in the construction of the dendrogram above, observation 3 was joined with the
+__unit consisting of 1 and 4__.
+
+This process continues until all observations are joined.
+
+\newpage
+The obvious question is thus: __How is the dissimilarity of collections of observations
+calculated?__ There are a few different approaches. Two of the standard ones are
+as follows:
+
+With \textcolor{red}{complete linkage}, the distance between sets of observations, $S_i$ and $S_j$, 
+is defined to be
+the __maximal__ dissimilarity between all pairs $x \in S_i$ and $y \in S_j$.
+
+With \textcolor{red}{single linkage}, the distance between sets of observations, $S_i$ and $S_j$,
+is defined to be
+the __minimal__ dissimilarity between all pairs $x \in S_i$ and $y \in S_j$.
+
+Less-commonly used options are \textcolor{red}{centroid linkage}, in which the distance between
+$S_i$ and $S_j$ is calculated as the dissimilarity between the centroids of the two
+groups, and \textcolor{red}{average linkage}, calculated as the average distance between all
+pairs of elements in $S_i$ and $S_j$.
+
+\newpage
+#Hierarchical Clustering in R
+
+The function `hclust()` performs hierarchical clustering in R.
+
+Remember that this method is built around a user-chosen measure of
+dissimilarity. Hence, the primary input argument to `hclust()` is
+a symmetric $n$ by $n$ distance matrix.
+The diagonal of this
+matrix should consist of zeros.
+
+
+\newpage
+
+The syntax for complete linkage clustering is as follows:
+
+```{r}
+hcout = hclust(dist(t(stocksamplescl[,1:100])), 
+               method="complete")
+```
+
+(Note that only the first 100 stocks are used, since the dendrogram
+becomes difficult to read otherwise. There is no such practical limit
+in using this method, however.)
+
+Other choices for `method` include `single`, `centroid`,
+and `average`.
+
+The `plot()` function, when applied to the output of `hclust()`,
+produces the dendrogram:
+
+```{r,fig.height=6,fig.align="center"}
+plot(hcout, labels=stocksample$name[1:100], 
+          cex=0.35,sub="", xlab="")
+```
+
+
+\newpage
+
+Another useful function is `cutree()`. This will create return
+cluster membership for each of the observation, based on a desired
+number of clusters, or on a desired height.
+
+For instance, to cut our dendrogram into six clusters, we specify
+`k=6`:
+
+```{r}
+cutree(hcout, k=6)[1:10]
+```
+
+And to cut our our dendrogram at a height of 10, specify
+`h=10`:
+
+```{r}
+cutree(hcout, h=10)[1:10]
+```
+
+\newpage
+
+We can again inspect how the clusters vary with respect to sector:
+
+\large
+```{r,fig.align="center"}
+stocksample$hcclust = factor(cutree(hcout,10))
+
+ggplot(stocksample, aes(x=hcclust,fill=sector)) + 
+  geom_bar() +
+  labs(x="Cluster",y="Count", fill="Sector")
+```

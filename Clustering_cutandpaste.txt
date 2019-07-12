@@ -1,0 +1,79 @@
+library(ggplot2)
+library(vegan)
+library(diffusionMap)
+
+------------------------------------------------------------------------
+Slide 15:
+
+stocksample = read.table("stocksample.txt", header=T,
+                sep="\t", comment.char="")
+
+stocksamplescl = apply(stocksample[,5:34],1,scale)
+
+
+------------------------------------------------------------------------
+Slide 16:
+
+kmout = kmeans(t(stocksamplescl), centers = 10, 
+      nstart = 10)
+
+
+------------------------------------------------------------------------
+Slide 17:
+
+stocksample$kmclust = factor(kmout$cluster)
+
+ggplot(stocksample, aes(x=kmclust,fill=sector)) + 
+  geom_bar() +
+  labs(x="Cluster",y="Count", fill="Sector")
+
+
+------------------------------------------------------------------------
+Slide 19:
+
+stockdistmat = dist(t(stocksamplescl))
+stockdiffmap = diffuse(stockdistmat, eps.val=50, t=10)
+stocksample$dmap1 = stockdiffmap$X[,1]
+stocksample$dmap2 = stockdiffmap$X[,2]
+
+ggplot(stocksample,aes(x=dmap1,y=dmap2,color=kmclust)) + 
+  geom_point() +
+  labs(x="First Diffusion Coordinate", 
+       y="Second Diffusion Coordinate", color="Cluster")
+
+
+------------------------------------------------------------------------
+Slide 23:
+
+set.seed(0)
+x = rnorm(10, c(0,0,0,0,0,5,5,5,7,7), sd = 0.5)
+
+plot(hclust(dist(x)),xlab="",sub="")
+
+
+------------------------------------------------------------------------
+Slide 29:
+
+hcout = hclust(dist(t(stocksamplescl[,1:100])), 
+               method="complete")
+
+plot(hcout, labels=stocksample$name[1:100], 
+          cex=0.35,sub="", xlab="")
+
+
+------------------------------------------------------------------------
+Slide 31:
+
+cutree(hcout, k=6)[1:10]
+
+cutree(hcout, h=10)[1:10]
+
+
+------------------------------------------------------------------------
+Slide 32:
+
+stocksample$hcclust = factor(cutree(hcout,10))
+
+ggplot(stocksample, aes(x=hcclust,fill=sector)) + 
+  geom_bar() +
+  labs(x="Cluster",y="Count", fill="Sector")
