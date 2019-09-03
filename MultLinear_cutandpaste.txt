@@ -1,0 +1,110 @@
+------------------------------------------------------------------------
+Page 4:
+
+source(http://www.stat.cmu.edu/~cschafer/MSCF/getFamaFrench.txt)
+ffhold = getFamaFrench(from="2016-1-1", to="2016-6-30")
+
+
+------------------------------------------------------------------------
+Page 5:
+
+PNC = getSymbols("PNC", from="2016-1-1", to="2016-6-30", auto.assign=F)
+ffhold$PNCexret = 100*dailyReturn(PNC) - ffhold$RF
+
+
+------------------------------------------------------------------------
+Page 6:
+
+ff3modPNC = lm(PNCexret ~ Mkt.RF + SMB + HML,data=ffhold)
+
+
+------------------------------------------------------------------------
+Page 7:
+
+par(mfrow=c(2,2))
+
+# Plot of residuals versus fitted values
+plot(as.numeric(ff3modPNC$fit), as.numeric(ff3modPNC$resid),
+   pch=16, xlab="Fitted Values", ylab="Residuals",
+   cex.axis=1.3, cex.lab=1.3)
+
+# Normal probability plot
+qqnorm(as.numeric(ff3modPNC$resid), cex.axis=1.3, cex.lab=1.3, 
+   pch=16, main="")
+qqline(as.numeric(ff3modPNC$resid))
+
+# Plot of residuals versus time
+plot(ff3modPNC$resid, xlab="Time", ylab="Residuals", cex.axis=1.3,
+   cex.lab=1.3, pch=16, main="")
+
+
+------------------------------------------------------------------------
+Page 18:
+
+forratedat = read.table(
+  "http://www.stat.cmu.edu/$\sim$cschafer/MSCF/forratedat.txt",header=T)
+attach(forratedat)
+
+
+------------------------------------------------------------------------
+Page 19:
+
+maturity = scale(maturity)
+
+fullmod = lm(emp ~ maturity + I(maturity^2) + I(maturity^3) + 
+   I(maturity^4) + I(maturity^5) + I(maturity^6) + I(maturity^7) + 
+   I(maturity^8) + I(maturity^9))
+
+
+------------------------------------------------------------------------
+Page 20:
+
+allpreds = cbind(maturity, maturity^2, maturity^3, maturity^4, 
+           maturity^5, maturity^6, maturity^7, maturity^8, maturity^9)
+
+Xyframe = data.frame(cbind(allpreds, emp))
+
+library(bestglm)
+bestmod = bestglm(Xyframe, IC="AIC")
+
+
+------------------------------------------------------------------------
+Page 23:
+
+finalmod = step(fullmod, direction="both")
+
+
+------------------------------------------------------------------------
+Page 30:
+
+levs = hatvalues(fullmod)
+
+PRESS = sum((fullmod$resid/(1-levs))^2)
+
+bestmod2 = bestglm(Xyframe, IC="LOOCV")
+
+
+------------------------------------------------------------------------
+Page 45:
+
+insdat = read.table(
+  "http://www.stat.cmu.edu/~cschafer/MSCF/Allstatesub.txt", sep=",", 
+   header=T)
+
+
+------------------------------------------------------------------------
+Page 46:
+
+fulllm = lm(loss ~ ., data=insdat)
+
+predlist = attributes(terms(formula(fulllm)))$term.labels
+
+pvalue = numeric(length(predlist))
+
+for(i in 1:length(predlist))
+{
+   holdout = drop1(fulllm, predlist[i], test="F")
+   pvalue[i] = holdout$`Pr(>F)`[2]
+}
+
+cbind(predlist, signif(pvalue))

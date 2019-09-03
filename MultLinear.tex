@@ -1,0 +1,1564 @@
+\documentclass{report}
+
+\usepackage{palatino}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage{color}
+\usepackage{graphicx}
+\usepackage [pagewise, mathlines, displaymath]{lineno}
+\setlength{\pdfpagewidth}{8.5in}
+\setlength{\pdfpageheight}{11in}
+\textwidth=6.0in
+\textheight=9in
+\topmargin=-0.5in
+\oddsidemargin=0.25in
+\lhead{Part 17: Multiple Linear Regression}
+\lfoot{Lecture Notes for FDS}
+\rfoot{\footnotesize Page \thepage\ of \pageref{LastPage}}
+\cfoot{Last Updated \today}
+\pagestyle{fancy}
+\parindent=0in
+\renewcommand{\baselinestretch}{1.5}
+\newcommand{\hpad}{{\hspace{.15in}}}
+
+\input defs.tex
+
+\parskip=.4in
+
+\linenumbers
+\begin{document}
+\huge
+{\bf Part 17: Multiple Linear Regression}
+
+\Large
+Text references: \S 3.2 in ISL, Chapters 12 and 13 in Ruppert.
+
+In this part, we will extend from the simple linear regression
+model to {\bf multiple regression}.
+
+These models
+comprise the familiar linear models that take the form
+\[
+   Y = \beta_0 + \sum_{j=1}^p \beta_j x_j + \epsilon
+\]
+where $\epsilon$ are assumed to be uncorrelated 
+with mean zero and variance $\sigma^2$. Assuming that
+the $\epsilon$ are normally distributed brings additional
+nice properties.
+
+We will go through the fundamental steps of fitting such a model
+via an example.
+
+\newpage
+\makerule
+
+{\bf \LARGE Example: Factor Models}
+
+References to the ``beta'' for a stock derive from the
+slope of the regression line fit to a scatter plot where
+excess return for that equity is the response, and excess market
+return is the predictor.
+Models of this form are an important component
+of Capital Asset Pricing Model (CAPM).
+
+The term {\bf Factor Model} is used to indicate any
+linear model for excess return on an equity. The predictors
+in the model are the {\bf factors}. 
+
+Quoting Ruppert, examples of factors include
+
+\vspace{-.4in}
+\begin{enumerate}
+\item returns on the market portfolio;
+\item growth rate of the GDP;
+\item interest rate on short term Treasury bills or changes in this rate;
+\item inflation rate or changes in this rate;
+\item interest rate spreads;
+\item return on some portfolio of stocks;
+\item the difference between the returns on two portfolios.
+\end{enumerate}
+
+\newpage
+
+The CAPM only includes the factor for excess market return.
+
+The {\bf Fama-French Three Factor Model} adds two
+factors.
+
+The first is {\bf small minus big (SMB)}, the difference
+in returns between portfolios of small and large stocks.
+
+The second is {\bf high minus low (HML)}, the difference
+in returns between portfolios of high and low book-to-market
+stocks.
+
+See Ruppert for more details on these factors,
+and motivation on their inclusion in the model.
+
+\newpage
+Kenneth French maintains a web site with data on the three factors
+
+\vspace{-.3in}
+\normalsize
+{\tt
+http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data\_\_library.html}
+
+\Large
+
+I wrote a simple R function that will allow for easy access to the
+daily factor data.
+
+This function, named {\tt getFamaFrench()}, is located at
+
+\vspace{-.3in}
+\normalsize
+{\tt
+http://www.stat.cmu.edu/$\sim$cschafer/MSCF/getFamaFrench.txt}
+
+\Large
+
+The syntax is much like the functions in {\tt quantmod}:
+
+\Rcode{> ffhold = getFamaFrench(from="2016-1-1",\\
+\textcolor{white}{xxxxx} to="2016-6-30")}
+
+(Note that data is typically unavailable for the most recent months.)
+
+The first few rows of the data returned are as follows:\footnote{These 
+factors are periodically revised, and hence the exact
+numbers may be different at the present time. This will affect the
+subsequent analysis, as well. The analysis shown here was performed on
+January 8, 2017.}
+
+\vspace{-.2in}
+\normalsize
+\begin{verbatim}
+            Date Mkt.RF   SMB   HML    RF
+23638 2016-01-04  -1.59 -0.83  0.53 0.000
+23639 2016-01-05   0.12 -0.21  0.00 0.000
+23640 2016-01-06  -1.35 -0.13  0.01 0.000
+23641 2016-01-07  -2.44 -0.28  0.12 0.000
+23642 2016-01-08  -1.11 -0.47 -0.04 0.000
+23643 2016-01-11  -0.06 -0.65  0.35 0.000
+...
+\end{verbatim}
+\Large
+
+\newpage
+Let's get the data for PNC for the same time period
+
+\Rcode{> PNC = getSymbols("PNC", from="2016-1-1", \\
+\textcolor{white}{xxxxx} to="2016-6-30", auto.assign=F)}
+
+Now find the excess returns for PNC. Note that the Fama-French
+data file includes the risk free rate, with name {\tt RF}:
+
+\Rcode{> ffhold\$PNCexret = 100*dailyReturn(PNC) - ffhold\$RF}
+
+%Note that this command added a new variable (column) named {\tt PNCexret}
+%to the {\bf data frame} {\tt ffhold}.
+
+\newpage
+The three factor model we fit is
+\[
+   \mbox{PNC.Ex.Ret.} = \beta_0 + \beta_1 \:\mbox{Mkt.Ex.Ret.}
+   + \beta_2 \:\mbox{SMB} + \beta_3 \:\mbox{HML} + \epsilon
+\]
+
+The R command for fitting a linear regression is {\tt lm()}:
+
+\Rcode{> ff3modPNC = lm(PNCexret $\sim$ Mkt.RF + SMB + HML,\\
+\textcolor{white}{xxxxx} data=ffhold)}
+
+Note the use of the {\tt data} argument to specify the data frame
+from which the variables are taken.
+
+The key information from the fit of the model is stored in the
+object {\tt ff3modPNC}. 
+In particular, note that
+
+\vspace{-.4in}
+\normalsize
+\begin{verbatim}
+> attributes(ff3modPNC)
+$names
+ [1] "coefficients"  "residuals"     "effects"       "rank"         
+ [5] "fitted.values" "assign"        "qr"            "df.residual"  
+ [9] "xlevels"       "call"          "terms"         "model"        
+\end{verbatim}
+\Large
+
+For example, you can obtain the residuals from\\
+{\tt as.numeric(ff3modPNC\$residuals)}.
+\footnote{It is necessary to transform {\tt ff3modPNC\$residuals} using
+{\tt as.numeric()} because it inherits the time series format
+from the original data.}
+
+
+\newpage
+{\bf Diagnostic Plots}
+
+Figure \ref{PNCdiagnostic} shows three key diagnostic plots:
+
+\vspace{-.4in}
+\begin{enumerate}
+\item Plot of residuals versus fitted values. 
+\item Normal probability plot.
+\item Plot of residuals versus time.
+\end{enumerate}
+
+Below are the R commands to create this figure.
+
+\normalsize
+\begin{verbatim}
+par(mfrow=c(2,2))
+
+# Plot of residuals versus fitted values
+plot(as.numeric(ff3modPNC$fit), as.numeric(ff3modPNC$resid),
+   pch=16, xlab="Fitted Values", ylab="Residuals",
+   cex.axis=1.3, cex.lab=1.3)
+
+# Normal probability plot
+qqnorm(as.numeric(ff3modPNC$resid), cex.axis=1.3, cex.lab=1.3, 
+   pch=16, main="")
+qqline(as.numeric(ff3modPNC$resid))
+
+# Plot of residuals versus time
+plot(ff3modPNC$resid, xlab="Time", ylab="Residuals", cex.axis=1.3,
+   cex.lab=1.3, pch=16, main="")
+\end{verbatim}
+\Large
+
+\newpage
+
+\begin{figure}[ht]
+\begin{center}
+\includegraphics[width=5.5in]{FFmodel/PNCdiagnostic.eps}
+\vspace{-.2in}
+\caption{Diagnostic plots for the three factor model for PNC.}
+\label{PNCdiagnostic}
+\end{center}
+\end{figure}
+
+\textcolor{qcol}{{\bf Exercise:} Comment on the quality of the fit.}
+
+\answerlines{4}
+
+\newpage
+
+Use the {\tt summary()} function to see
+the parameter estimates and their standard errors:\footnote{Again, a reminder
+that your results could be slightly different since the Fama-French factors are
+periodically updated.}
+
+\normalsize
+\begin{verbatim}
+Call:
+lm(formula = PNCexret ~ Mkt.RF + SMB + HML, data = ffhold)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-2.35913 -0.51226  0.09069  0.41264  3.08356 
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept) -0.16153    0.06945  -2.326   0.0217 *  
+Mkt.RF       1.20089    0.06952  17.275  < 2e-16 ***
+SMB         -0.03428    0.13890  -0.247   0.8055    
+HML          0.78117    0.11937   6.544 1.52e-09 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.7755 on 121 degrees of freedom
+Multiple R-squared:  0.7699,	Adjusted R-squared:  0.7642 
+F-statistic:   135 on 3 and 121 DF,  p-value: < 2.2e-16
+\end{verbatim}
+\Large
+
+\newpage
+\textcolor{qcol}{{\bf Exercise:} There is strong evidence that $\beta_3$,
+the coefficient for HML, is larger than zero. How did I reach this conclusion,
+and what is the interpretation?}
+
+\answerlines{15}
+
+
+\newpage
+\makerule
+
+{\bf \LARGE Linear Regression in Matrix Notation}
+
+First, recall our simple linear regression model:
+\[
+   Y_i = \beta_0 + \beta_1 X_i + \epsilon_i, \:\:\:i=1,2,\ldots,n
+\]
+
+We can rewrite this model in matrix notation by letting
+\[
+%\begin{array}{cc} 
+{\bf Y} = \left[\begin{array}{c}Y_1\\Y_2\\ \vdots \\Y_n\end{array}\right]
+\:\:\:\:\:\:
+{\bf X} = \left[\begin{array}{cc}1&X_1\\1&X_2\\ \vdots & \vdots 
+   \\1&X_n\end{array}\right] 
+\:\:\:\:\:\:
+{\bf \boldbeta} = \left[\begin{array}{c}\beta_0\\\beta_1\end{array}\right]
+\:\:\:\:\:\:
+{\bf \boldepsilon} = \left[\begin{array}{c}\epsilon_1\\\epsilon_2\\ \vdots \\\epsilon_n\end{array}\right]
+%\end{array}
+\]
+and then noting that
+\[
+   {\bf Y} = {\bf X} \boldbeta + \boldepsilon
+\]
+
+When moving to multiple regression, the main change we must make is to add
+columns to the matrix ${\bf X}$, commonly called the {\bf design matrix},
+and add entries to $\boldbeta$:
+\[
+{\bf X} = \left[\begin{array}{ccccc}
+1 & X_{11} & X_{12} & \cdots & X_{1,p}\\
+1 & X_{21} & X_{22} & \cdots & X_{2,p}\\
+\vdots & \vdots & \vdots & & \vdots \\
+1 & X_{n1} & X_{n2} & \cdots & X_{n,p}\\
+\end{array}\right] 
+\:\:\:\:\:\:
+{\bf \boldbeta} = \left[\begin{array}{c}\beta_0\\\beta_1\\ \vdots\\ \beta_{p}\end{array}\right]
+\]
+
+\newpage
+
+One can show that the least
+squares estimators (now a vector) are
+\[
+   \boldbetahat = ({\bf X}^T{\bf X})^{-1} {\bf X}^T{\bf Y}.
+\]
+and can now define the vector of fitted values and residuals
+as
+\[
+{\bf \widehat {\bf Y}} = \left[\begin{array}{c}\widehat Y_1\\\widehat Y_2\\ \vdots \\\widehat Y_n\end{array}\right]
+\:\:\:\:\:\mbox{and}\:\:\:\:\:
+\boldepsilonhat = \left[\begin{array}{c}\widehat \epsilon_1\\\widehat \epsilon_2\\ \vdots \\\widehat \epsilon_n\end{array}\right]
+\]
+and it follows that 
+\[
+   \widehat {\bf Y} = {\bf X} \boldbetahat \:\:\:\:\mbox{and}\:\:\: \boldepsilonhat= {\bf Y} - {\bf \widehat Y}.
+\]
+
+%\textcolor{qcol}{{\bf Exercise:} Explain the above derivations.}
+
+%\answerlines{10}
+
+\newpage
+{\bf The Hat Matrix}
+
+We note that we could write
+\[
+   \widehat {\bf Y} = {\bf X} \boldbetahat = {\bf X} ({\bf X}^T{\bf X})^{-1} {\bf X}^T{\bf Y} = {\bf H} {\bf Y}
+\]
+where
+\[
+   {\bf H} = {\bf X} ({\bf X}^T{\bf X})^{-1} {\bf X}^T
+\]
+is called the {\bf hat matrix} (because it puts a ``hat'' on ${\bf Y}$).
+
+The diagonal entries of ${\bf H}$ are referred to as the {\bf leverages}.
+%\[
+%   h_{ii} = \left(\frac{1}{n} + \frac{\left(X_i - \overline{X}\right)^2}{S_{xx}}\right).
+%\]
+
+{\bf Comment:} 
+Mathematically, ${\bf H}$ is a {\bf projection matrix}, as it ``projects'' the vector of observed
+responses ${\bf Y}$ onto the space of all vectors which are linear combinations of the columns
+of ${\bf X}$. In fact, we note that ${\bf H}$ is symmetric and {\bf idempotent}, meaning that ${\bf H} {\bf H} = {\bf H}$.
+
+\textcolor{qcol}{{\bf Exercise:} Show that ${\bf I} - {\bf H}$ is also symmetric and idempotent.}
+
+\answerlines{5}
+
+\newpage
+{\bf Additional Results}
+
+A range of important results can be proven:
+
+\vspace{-.4in}
+\begin{enumerate}
+%\item The least squares estimator for $\boldbeta$ is $\boldbetahat = ({\bf X}^T{\bf X})^{-1} {\bf X}^T {\bf Y}$.
+\item The variance of $\boldbetahat$ is $\sigma^2({\bf X}^T{\bf X})^{-1}$.
+\item $\widehat {\bf Y} = {\bf X} \boldbetahat = {\bf H} {\bf Y}$, where the (symmetric, idempotent) hat matrix ${\bf H}$ is defined as above.
+\item $\boldepsilonhat = {\bf Y} - {\bf \widehat Y} = ({\bf I} - {\bf H}) {\bf Y}$.
+\item If $\boldepsilon$ is assumed normal with mean zero and variance $\sigma^2\,{\bf I}$,
+\begin{enumerate}
+\item $\boldbetahat$ is the maximum likelihood estimator.
+\item ${\bf Y}$ is multivariate normal with mean ${\bf X} \boldbeta$ and covariance $\sigma^2\,{\bf I}$.
+\item $\boldbetahat$ is multivariate normal with mean $\boldbeta$ and covariance $\sigma^2({\bf X}^T{\bf X})^{-1}$.
+\item ${\bf \widehat Y}$ is multivariate normal with mean ${\bf X} \boldbeta$ and covariance $\sigma^2\,{\bf H}$.
+\item $\boldepsilonhat$ is multivariate normal with mean zero and covar. $\sigma^2({\bf I} - {\bf H})$.
+\end{enumerate}
+\end{enumerate}
+
+
+\newpage
+{\bf Degrees of Freedom}
+
+One key thing that does change when moving to multiple regression is the number of
+{\bf degrees of freedom} in the residual vector.
+
+Recall that we had seen previously that with simple linear regression, it held that
+\[
+   \sum_i \widehat \epsilon_i = 0 \:\:\:\mbox{and}\:\:\: \sum_i \widehat \epsilon_i X_i = 0.
+\]
+This result is one way of seeing why the residuals only have $n-2$ degrees of freedom in the
+case of simple linear regression: There are two constraints placed on the vector of residuals.
+
+But, these facts could be written more compactly using matrix notation: ${\bf X}^T \boldepsilonhat = {\bf 0}$,
+where ${\bf 0}$ is a vector consisting entirely of zeros.
+
+In fact, this result extends to multiple regression: The vector of residuals $\boldepsilonhat$ is
+orthogonal to {\bf every column} of ${\bf X}$, i.e., ${\bf X}^T \boldepsilonhat = {\bf 0}$.
+
+%\textcolor{qcol}{{\bf Exercise:} How many degrees of freedom are there in the residual vector in
+%this multiple regression setting?}
+%
+%\answerlines{1}
+
+\newpage
+{\bf We now can state that there are $n-(p+1)$ degrees of freedom in the residuals}, and hence need to
+update some of our previous results. (You will note that simple linear regression corresponds to
+the case where $p=1$.) In particular:
+
+\vspace{-.4in}
+\begin{enumerate}
+\item The unbiased estimator of $\sigma^2$ is
+\[
+   \widehat \sigma^2 = {\rm RSS}\bigg/(n-p-1)
+\]
+\item The statistic
+\[
+   \frac{\widehat \beta_i - \beta_i}{\widehat {\rm SE}(\widehat \beta_i)}
+\]
+has the $t$-distribution with $n-p-1$ degrees of freedom. Hence, the following hold:
+\begin{enumerate}
+\item A 100$(1-\alpha)\%$ confidence interval for $\beta_i$ is formed as
+\[
+   \widehat \beta_i \pm t_{\alpha/2, n-p-1} \,\widehat {\rm SE}(\widehat \beta_i)
+\]
+\item Hypothesis tests concerning $\beta_i$ should compare the test statistic
+(the ``t value'') with the $t$-distribution with $n-p-1$ degrees of freedom.
+\end{enumerate}
+\end{enumerate}
+
+
+\newpage
+\makerule
+
+{\bf \LARGE Basic Variable Selection}
+
+The basic, general strategy for avoiding overfitting with models 
+is to compare the values of AIC across different number/choices of
+covariates
+
+Recall that we prefer the model which has the smallest value of AIC
+
+Unfortunately, when the number of covariates is large, the
+number of possible models is enormous. (There are $2^p$ possible models
+if there are $p$ covariates.)
+
+%Later we will discuss another more modern strategy for dealing with
+%this problem, the {\bf lasso}.
+
+\newpage
+
+We'll utilize the regression problem introduced earlier in which
+we sought to estimate the forward-rate function based on the current
+prices of zero-coupon bonds. The data are shown again as Figure
+\ref{forrateraw}.
+
+\begin{figure}[ht]
+\begin{center}
+\includegraphics[width=\textwidth]{StepwiseExample/rawdata.eps}
+\vspace{-.5in}
+\caption{The response versus time for the estimation of the forward
+rate function.}
+\vspace{.1in}
+\label{forrateraw}
+\end{center}
+\end{figure}
+
+You can read in this data set using the command
+
+\vspace{.2in}
+\normalsize
+\Rcode{> forratedat = \\
+\textcolor{white}{xx} read.table("http://www.stat.cmu.edu/$\sim$cschafer/MSCF/forratedat.txt",\\
+\textcolor{white}{xx} header=T)}
+
+\Rcode{> attach(forratedat)}
+\Large
+
+\newpage
+We are considering polynomial models of the form
+\[
+   Y_i = \sum_{j=0}^p \beta_j T_i^j + \epsilon_i
+\]
+but our goal is to find the best subset of the $p$ polynomial terms to include
+in the model. (As is usually the case, 
+we do not consider removing the intercept $\beta_0$.)
+
+The ``full'' model (largest possible model) we'll consider includes up to
+the ninth power.
+
+%\textcolor{qcol}{{\bf Exercise:} Why should we be careful when raising
+%a predictor to such a large power?}
+
+%\answerlines{9}
+
+We will scale the predictor first, so that it has mean zero and 
+standard deviation one:
+
+\Rcode{> maturity = scale(maturity)}
+
+Now, we can fit the full model:
+
+\Rcode{> fullmod = lm(emp $\sim$ maturity + I(maturity\pow 2) + \\
+\textcolor{white}{xxx}   I(maturity\pow 3) + I(maturity\pow 4) + I(maturity\pow 5) +\\
+\textcolor{white}{xxx}   I(maturity\pow 6) + I(maturity\pow 7) + I(maturity\pow 8) +\\
+\textcolor{white}{xxx}   I(maturity\pow 9))}
+
+Note the use of {\tt I()} function to wrap the polynomial terms is required by R.
+
+\newpage
+
+{\bf Exhaustive Search}
+
+In cases where the number of predictors is small, an exhaustive search
+over all possible models is possible.
+
+One implementation of this in R is the function {\tt bestglm()} which
+is part of the package {\tt bestglm}.
+
+Unfortunately, the syntax for this function requires that the predictors
+and response be in a single data frame, with the response as the last
+column.
+
+Consider the following commands
+
+\Rcode{> allpreds = cbind(maturity, maturity\pow 2,\\
+\textcolor{white}{xxxxx}  maturity\pow 3, maturity\pow 4, maturity\pow 5,\\
+\textcolor{white}{xxxxx}  maturity\pow 6, maturity\pow 7, maturity\pow 8,\\
+\textcolor{white}{xxxxx}  maturity\pow 9)}
+
+\Rcode{> Xyframe = data.frame(cbind(allpreds, emp))}
+
+Note that now {\tt Xyframe} holds the predictors and the response.
+
+\Rcode{> bestmod = bestglm(Xyframe, IC="AIC")}
+
+By specifying {\tt IC = "AIC"} we are telling the function
+to use AIC to choose the model.
+
+\newpage
+The R command
+
+\Rcode{> print(bestmod)}
+
+\vspace{-.4in}
+will show the output below
+
+\vspace{-.2in}
+\normalsize
+\begin{verbatim}
+AIC
+BICq equivalent for q in (0.0443666836953486, 0.908095644854053)
+Best Model:
+                Estimate   Std. Error    t value      Pr(>|t|)
+(Intercept)  0.066820498 0.0004770183 140.079524 8.381181e-126
+V1           0.004950250 0.0008628244   5.737262  8.591912e-08
+V4          -0.008479843 0.0007636180 -11.104824  1.134645e-19
+V5          -0.004005042 0.0008106249  -4.940684  2.801999e-06
+V6           0.002275548 0.0002881148   7.898061  2.313625e-12
+V7           0.001183985 0.0002729549   4.337659  3.206729e-05
+\end{verbatim}
+\Large
+
+%{\bf Be careful with the predictor names that R assigns!}
+
+\vspace{-.4in}
+We see that the optimal model takes the form
+\[
+   Y_i = \beta_0 + \beta_1 T_i + \beta_4 T_i^4 + \beta_5 T_i^5 + \beta_6 T_i^6 + \beta_7 T_i^7 + \epsilon_i
+\]
+%This is the same model that was found in Part 1.
+\newpage
+
+{\bf Stepwise Regression}
+
+An exhaustive search is not feasible when there is a large number of
+predictors.
+
+A classic strategy for dealing with the large number of possible models
+is to use a {\bf stepwise variable selection} procedure.
+
+With this method, one (typically) starts with the largest model under consideration,
+and then takes a sequence of {\bf steps}: At each step one covariate is 
+either {\bf added} or {\bf dropped}.
+
+The decision for which step to take (i.e., which covariate to add or
+drop) is based on AIC: You take the step which reduces AIC the most.
+
+Once AIC no longer changes, the process stops, and you have your final
+model.
+
+This algorithm is far from perfect, but is useful in the appropriate 
+situations.
+
+This is built into R using the function {\tt step()}
+
+
+\newpage
+Now we will use the {\tt step()} function on the example above.
+
+The syntax is simple:
+
+\Rcode{> finalmod = step(fullmod, direction="both")}
+
+Recall that {\tt fullmod} holds the output of the full model fit.
+
+The use of {\tt direction = "both"} tells R to consider not only removing
+predictors, but also adding predictors to the model. (Once a predictor is removed, it
+could be returned to the model in a later step.)
+
+\newpage
+The output of the first step of algorithm appears below.
+
+\vspace{-.4in}
+\normalsize
+\begin{verbatim}
+Start:  AIC=-1296.97
+emp ~ maturity + I(maturity^2) + I(maturity^3) + I(maturity^4) + 
+    I(maturity^5) + I(maturity^6) + I(maturity^7) + I(maturity^8) + 
+    I(maturity^9)
+
+                Df  Sum of Sq       RSS     AIC
+- I(maturity^6)  1 3.0370e-07 0.0013612 -1298.9
+- I(maturity^9)  1 3.3910e-07 0.0013613 -1298.9
+- I(maturity^8)  1 9.2100e-07 0.0013619 -1298.9
+- I(maturity^3)  1 9.7950e-07 0.0013619 -1298.9
+- I(maturity^7)  1 1.7992e-06 0.0013627 -1298.8
+- I(maturity^2)  1 2.1071e-06 0.0013630 -1298.8
+- I(maturity^5)  1 3.4433e-06 0.0013644 -1298.7
+- I(maturity^4)  1 4.7036e-06 0.0013656 -1298.6
+- maturity       1 2.2945e-05 0.0013839 -1297.0
+<none>                        0.0013609 -1297.0
+\end{verbatim}
+\Large
+
+Note how the table lists each of the covariates currently in the
+model, and gives what AIC would be if that covariate were removed.
+
+We also see the line labelled {\tt <none>}, indicating that the
+AIC would stay at $-1297.0$ if none were removed.
+
+The covariates are ordered by increasing values of AIC. (Unfortunatley,
+due to rounding it's not possible to see some distinctions in this output.)
+
+\newpage
+So, the term {\tt I(maturity\pow 6)} is removed at the first step.
+
+The second step is shown as:
+
+\vspace{-.4in}
+\normalsize
+\begin{verbatim}
+Step:  AIC=-1298.94
+emp ~ maturity + I(maturity^2) + I(maturity^3) + I(maturity^4) + 
+    I(maturity^5) + I(maturity^7) + I(maturity^8) + I(maturity^9)
+
+                Df  Sum of Sq       RSS     AIC
+- I(maturity^9)  1 3.3900e-07 0.0013616 -1300.9
+- I(maturity^3)  1 9.8000e-07 0.0013622 -1300.9
+- I(maturity^7)  1 1.7990e-06 0.0013630 -1300.8
+- I(maturity^5)  1 3.4430e-06 0.0013647 -1300.7
+- I(maturity^2)  1 1.9184e-05 0.0013804 -1299.3
+- maturity       1 2.2945e-05 0.0013842 -1299.0
+<none>                        0.0013612 -1298.9
++ I(maturity^6)  1 3.0400e-07 0.0013609 -1297.0
+- I(maturity^4)  1 8.0262e-05 0.0014415 -1294.3
+- I(maturity^8)  1 1.2814e-04 0.0014894 -1290.5
+\end{verbatim}
+\Large
+
+The decision of this step is to remove {\tt I(maturity\pow 9)}. Note that
+also under consideration was to add back in the term that was removed.
+
+\newpage
+This process continues until a final model is reached:
+
+\vspace{-.4in}
+\normalsize
+\begin{verbatim}
+Step:  AIC=-1303.2
+emp ~ maturity + I(maturity^4) + I(maturity^5) + I(maturity^7) + 
+    I(maturity^8)
+
+                Df  Sum of Sq       RSS     AIC
+<none>                        0.0013818 -1303.2
++ I(maturity^2)  1 0.00001918 0.0013626 -1302.8
++ I(maturity^6)  1 0.00001738 0.0013644 -1302.7
++ I(maturity^3)  1 0.00000105 0.0013808 -1301.3
++ I(maturity^9)  1 0.00000041 0.0013814 -1301.2
+- I(maturity^7)  1 0.00023342 0.0016152 -1287.1
+- I(maturity^5)  1 0.00030284 0.0016847 -1282.2
+- maturity       1 0.00040836 0.0017902 -1275.2
+- I(maturity^8)  1 0.00075672 0.0021385 -1254.5
+- I(maturity^4)  1 0.00212230 0.0035041 -1197.3
+\end{verbatim}
+\Large
+
+So, we have arrived (after only four steps) 
+at a model that includes powers 1, 4, 5, 7, and 8.
+
+\textcolor{qcol}{{\bf Exercise:} How does this model compare to the one
+we stated as being optimal using the exhaustive search? What happened?}
+
+\answerlines{4}
+
+
+\newpage
+\makerule
+{\bf \LARGE Cross Validation}
+
+We've discussed the use of AIC for the purpose of
+{\bf model selection}, i.e.~the process of determining which
+covariates should be included in the model.
+
+An important alternative is {\bf leave-one-out cross validation}.
+
+In this approach, one imagines refitting the model $n$ times,
+each time excluding one of the $n$ observations. 
+
+At iteration $i$, observation $i$ is excluded. The fitted model
+is then used to predict the response for this observation. 
+Call this $\widehat y_{(-i)}$.
+
+Finally, we calculate the quantity
+\[
+   {\rm PRESS} = \sum_{i=1}^n \left(y_i -\widehat y_{(-i)}\right)^2
+\]
+where {\bf PRESS} stands for {\bf Prediction Error Sum of Squares}.
+
+\newpage
+The motivation for this is as follows: Once observation $i$ is removed
+from the fit, we have removed the {\bf influence} that this observation
+has on the parameter estimates.
+
+Now, we can think of observation $i$ as being a ``new'' observation,
+and we can ask: ``How well does the model, containing only these covariates,
+predict the response for this case?'' 
+
+The quantity $(y_i - \widehat y_{(-i)})^2$ quantifies the amount of error in this
+prediction.
+
+\textcolor{qcol}{{\bf Exercise:} Which is larger: PRESS or RSS?}
+
+\answerlines{9}
+
+\newpage
+Fortunately, it is not actually necessary to fit $n$ models in order 
+calculate PRESS.
+
+The remarkable result is as follows:
+
+\thinrule
+\begin{quote}
+Let ${\bf Y}$ be a vector consisting of the $n$ responses, and
+let $\widehat {\bf Y}$ be a vector consisting of the $n$ fitted
+values (from the full model).
+
+If it is the case that $\widehat {\bf Y} = {\bf H} {\bf Y}$, then 
+\[
+   y_i - \widehat y_{(-i)} = \frac{\widehat \epsilon_i}{1-h_{ii}} 
+\]
+where $h_{ii}$ is the $i^{th}$ diagonal element of ${\bf H}$.
+\end{quote}
+\thinrule
+
+In the case of linear regression, it is the case that
+\[
+   {\bf H} = {\bf X} \!\left({\bf X}^T{\bf X}\right)^{-1} {\bf X}^T
+\]
+where ${\bf X}$ whose columns hold the values of the predictors.
+See Ruppert for the details.
+
+This matrix {\bf H} is previously mentioned {\bf hat matrix}.
+
+The diagonal elements $h_{ii}$ are called the {\bf leverages}.
+
+\newpage
+
+The leverages can be found in R using
+
+\Rcode{> levs = hatvalues(fullmod)}
+
+Then we can find PRESS using
+
+\Rcode{> PRESS = sum((fullmod\$resid/(1-levs))\pow 2)}
+
+We find PRESS to be 0.001974 for this model.
+
+Of course, our goal is to find the model with lowest PRESS.
+In R we can do this using the function {\tt bestglm()} with
+{\tt IC="LOOCV"}:
+
+\Rcode{> bestmod2 = bestglm(Xyframe, IC="LOOCV")}
+
+\normalsize
+\begin{verbatim}
+LOOCV
+BICq equivalent for q in (0.0443666836953498, 0.908095644854043)
+Best Model:
+                Estimate   Std. Error    t value      Pr(>|t|)
+(Intercept)  0.066820498 0.0004770183 140.079524 8.381181e-126
+V1           0.004950250 0.0008628244   5.737262  8.591912e-08
+V4          -0.008479843 0.0007636180 -11.104824  1.134645e-19
+V5          -0.004005042 0.0008106249  -4.940684  2.801999e-06
+V6           0.002275548 0.0002881148   7.898061  2.313625e-12
+V7           0.001183985 0.0002729549   4.337659  3.206729e-05
+\end{verbatim}
+\Large
+
+We arrive at the same model as when we used AIC.
+
+\newpage
+
+{\bf AIC versus PRESS}
+
+AIC and PRESS will often give similar, if not the same, result for the
+model choice.
+
+There are a couple main reasons to prefer
+PRESS to AIC: First, the quantity being estimated is by PRESS
+is a very natural measure of prediction performance. Second, the
+theory behind AIC is based on the assumption that the disributional
+assumption for the response is correct.
+
+A main reason to choose AIC over PRESS is that AIC is more
+stable. 
+The estimate
+that PRESS provides of the expected prediction error is subject
+to large variance. Hence, PRESS may
+not perform well for small to moderate sample sizes.
+
+Although PRESS is simple to calculate in the case of linear
+regression, this will not always be the case. In general,
+AIC will be easier to calculate than PRESS.
+
+As is often the case, our past experience will often guide our
+choice of criterion.
+
+\newpage
+\makerule
+{\bf \LARGE Comment: AIC Calculations in R}
+
+One must use great care when
+comparing values of AIC reported by different functions in R. There are
+additive constants that are sometimes arbitrarily discarded.
+Of course, when using the same R function for comparing
+two models, there will be no problem.
+
+{\bf Here is an important example.}
+Suppose that the response values $Y_1, Y_2, \ldots, Y_n$ are
+modeled such that they are indpendent, normally-distributed random variables 
+with mean $m(\boldbeta, {\bf x}_i)$ and variance $\sigma^2$. Here, ${\bf x}_i$
+is the vector of predictors. 
+
+\textcolor{qcol}{{\bf Exercise:}
+Show that the value of the log-likelihood is
+\[
+   \ell(\boldbeta, \sigma^2) = -\frac{n}{2} \log(2\pi) - \frac{n}{2} \log(\sigma^2) - \sum_{i=1}^n \left[\frac{\left(y_i - m\!\left(\boldbeta, {\bf x}_i\right)\right)^2}{2\sigma^2}\right].
+\]
+in this case.
+}
+
+\answerlines{5}
+
+\newpage
+Then, one can show that when you evaluate the log-likelihood at its peak,
+\[
+   -2 \ell(\widehat{\boldbeta}, \widehat \sigma^2) = n \log(2\pi) + n \log({\rm RSS}/n) + n.
+\]
+
+The R function {\tt AIC()} returns this full expression, plus two times the number of
+{\bf total} number of parameters (those in $\boldbeta$, and $\sigma^2$).
+
+The R function {\tt extractAIC()} returns only
+\[
+   n \log({\rm RSS}/n)
+\]
+plus two times the number of parameters in $\boldbeta$.
+
+Hence, the values returned by {\tt AIC()} and {\tt extractAIC()} differ by
+\[
+   n \log(2\pi) + n + 2.
+\]
+This is constant across all models being considered,
+and hence is of no practical importance.
+Continuing our example from above, (where $n=125$),
+
+\vspace{-.5in}
+\begin{verbatim}
+> AIC(ff3modPNC)
+[1] 297.1191
+> extractAIC(ff3modPNC)
+[1]   4.00000 -59.61554
+\end{verbatim}
+
+\vspace{-.2in}
+The function {\tt step()} uses {\tt extractAIC()} when calculating AIC.
+
+
+\newpage
+\makerule
+{\bf \LARGE Analysis of Variance}
+
+The term {\bf analysis of variance (ANOVA)} is somewhat
+old-fashioned, but refers broadly to tools and tests
+which attempt to decompose the {\bf total
+variability in the response into different components}.
+
+First, we will define the {\bf total sum of squares (SSTO or SST)}
+as
+\[
+   {\rm SSTO} = \sum_{i=1}^n \!\left(Y_i - \overline{Y}\right)^2
+\]
+
+\textcolor{qcol}{{\bf Exercise:} Interpret the quantity SSTO in the
+context of regression. Think about the simplest possible model
+for predicting the response.}
+
+\answerlines{8}
+
+\newpage
+We have already defined the {\bf residual sum of squares (RSS)} or 
+{\bf sum of squared errors (SSE)} as
+\[
+   {\rm SSE} = \sum_{i=1}^n \!\left(Y_i - \widehat Y_i\right)^2
+\]
+We will also define the {\bf regression sum of squares (${\rm SSR}$)} as
+\[
+   {\rm SSR} = \sum_{i=1}^n \!\left(\widehat Y_i - \overline{Y}\right)^2
+\]
+
+\textcolor{qcol}{{\bf Exercise:} Show that ${\rm SSTO} = {\rm SSR} + {\rm SSE}$.}
+
+\answerlines{13}
+
+\newpage
+
+\vspace{-.3in}
+\begin{figure}[ht]
+\begin{center}
+\includegraphics[width=5.0in]{DecompPlot/decompplot.eps}
+\caption{This figure shows the decomposition of the total sum of squares (SSTO)
+into the sum of squared errors (SSE) and the regression sum of squares (${\rm SSR}$).
+The top left plot shows the original scatter plot. The top right plot depicts
+how SSTO is calculated from the deviations of the points around the mean of the
+response values. The bottom left plot shows the residuals, these are squared
+and summed to find SSE. Finally, the bottom right plot shows how ${\rm SSR}$
+is calculated
+from the deviations from the regression line to the mean line.}
+\label{decompplot}
+\end{center}
+\end{figure}
+
+
+\newpage
+\makerule
+
+{\bf The ANOVA Table}
+
+Each of the three ``sums of squares'' defined previously has associated
+with it a certain number of {\bf degrees of freedom}.
+
+In particular, we say that ``SSTO has $n-1$ degrees of freedom'' because
+the list of $n$ deviations
+\[
+  Y_1 - \overline{Y}, \:Y_2 - \overline{Y}, \:\ldots,\: Y_n - \overline{Y}
+\]
+is subject to one restriction, namely that they must sum to zero.
+
+We say that ``SSE has $n-p-1$ degrees of freedom'' because the $n$ residuals
+\[
+   Y_1 - \widehat Y_1, \: Y_2 - \widehat Y_2, \:\ldots,\: Y_n - \widehat Y_n
+\]
+is subject to $p+1$ restrictions, i.e.~they are orthogonal to each of the columns
+of ${\bf X}$.
+
+Finally, the remaining $p$ degrees of freedom are attributed to ${\rm SSR}$ because
+there are $p$ free parameters in the regression model.
+
+\newpage
+This information is classically summarized in the {\bf analysis of variance table},
+as shown below.
+
+\begin{center}
+\begin{tabular}{lcccc}
+{\bf Source} & \hpad {\bf SS} \hpad & \hpad {\bf DF} \hpad & \hpad {\bf MS} \hpad & \hpad {\bf F} \\
+\hline
+Regression & \hpad SSR \hpad & \hpad $p$ \hpad & \hpad ${\rm SSR}/p$ \hpad & \hpad MSR/MSE \\
+Error & \hpad SSE \hpad & \hpad $n-p-1$ \hpad & \hpad ${\rm SSE}/(n-p-1)$ \hpad & \\
+\hline
+Total & \hpad SSTO \hpad & \hpad $n-1$ \hpad & & \\
+\end{tabular}
+\end{center}
+
+The column {\bf MS} provides the {\bf mean squares} for each of regression and error.
+You will note that the {\bf mean squared error (MSE)} is simply our unbiased estimator
+of $\sigma^2$, i.e., $E({\rm MSE}) = \sigma^2$.
+
+\newpage
+{\bf Global F Test for Regression}
+
+Assume that the irreducible errors are i.i.d.~normal with mean
+zero and variance $\sigma^2$, as is standard.
+Then we can prove the following:
+
+{\bf Important Theoretical Result:} 
+If it is the case that
+\[
+   \beta_1 = \beta_2 = \cdots = \beta_{p} = 0
+\]
+then ${\rm SSR}/{\sigma^2}$ has the chi-squared distribution with
+$p$ degrees of freedom. Further, ${\rm SSE}/{\sigma^2}$ has the
+chi-squared distribution with $n-p-1$ degrees of freedom. Finally,
+${\rm SSE}$ and ${\rm SSR}$ are independent.
+
+\textcolor{qcol}{{\bf Exercise:} What does this result tell
+us about the distribution of
+\[
+   F = \frac{{\rm MSR}}{{\rm MSE}}
+\]
+when $\beta_1 = \beta_2 = \cdots = \beta_{p} = 0$?}
+
+\answerlines{6}
+
+\newpage
+\textcolor{qcol}{{\bf Exercise:} Explain how the results on the
+previous page form the basis for a useful hypothesis test.}
+
+\answerlines{18}
+
+\newpage
+\makerule
+{\bf \LARGE Testing a Subset of the $\beta$'s}
+
+The Global F Test described above takes an ``all-or-nothing''
+approach to testing $\beta$ parameters. Suppose instead one wants to
+test the null hypothesis
+\[
+   H_0\!: \beta_1 = \beta_2 = \cdots = \beta_k = 0
+\]
+versus
+\[
+   H_1\!: \mbox{at least one of $\beta_1, \beta_2, \ldots, \beta_k \neq 0$}.
+\]
+where $k < p$.\footnote{The ordering of the predictors is arbitrary
+for the purposes of this test, so we can, without affecting anything, just
+assume that we want to test the first $k$ $\beta$ coefficients.}
+
+\textcolor{qcol}{{\bf Exercise:} Explain why this test would be particularly
+useful when working with factors as predictors.}
+
+\answerlines{6}
+
+\newpage
+To see how this test is constructed, first refer to the regression model
+with $\beta_1 = \beta_2 = \cdots = \beta_k =0$ as the {\bf reduced model}.
+It is ``reduced'' in the sense that it has fewer parameters than the
+{\bf full model}.
+
+Imagine fitting this reduced model, and saving the ${\rm SSE}$ from this fit
+as ${\rm SSE}_{\mbox{\small red}}$. Then, under the normality assumption for
+the irreducible errors, and when the null hypothesis
+\[
+   H_0\!:\beta_1 = \beta_2 = \cdots = \beta_k=0.
+\]
+is true, the statistic
+\[
+   F = \frac{\left({\rm SSE}_{\mbox{\small red}} - 
+   {\rm SSE}_{\mbox{\small full}}\right)\!/k}{{\rm MSE}_{\mbox{\small full}}}
+\]
+has the $F$-distribution with $k$ and $n-p-1$ degrees of freedom.
+
+The test is conducted as above: If the value of $F$ is too large, reject
+$H_0$ in favor of the alternative hypothesis that at least one of the 
+$\beta_i$ under consideration is not equal to zero.
+
+\newpage
+{\bf Conducting the Test in R}
+
+R has a built-in function {\tt anova()} which, among other things,
+will report the results of this test. The syntax is simple:
+
+\large
+\begin{verbatim}
+proslmfull = lm(log(PSA)~log(CV)+log(PW)+Age+sqrt(BPH)+
+    sqrt(CP), data=prosdat)
+
+proslmred = lm(log(PSA)~log(CV)+log(PW)+Age, data=prosdat)
+
+> anova(proslmred, proslmfull)
+Analysis of Variance Table
+
+Model 1: log(PSA)~log(CV)+log(PW)+Age
+Model 2: log(PSA)~log(CV)+log(PW)+Age+sqrt(BPH)+sqrt(CP)
+
+  Res.Df    RSS Df Sum of Sq      F Pr(>F)
+1     93 52.600                           
+2     91 50.729  2    1.8707 1.6779 0.1925
+\end{verbatim}
+
+\Large
+
+\textcolor{qcol}{{\bf Exercise:} Describe the conclusion of the test shown
+above.}
+
+\answerlines{3}
+
+\newpage
+\makerule
+{\bf \LARGE Example: Predicting Insurance Claims Severity}
+
+This challenge comes from Kaggle, with details that can be found at
+
+\large
+\vspace{-.5in}
+\begin{verbatim}
+https://www.kaggle.com/c/allstate-claims-severity/
+\end{verbatim}
+\Large
+
+
+\begin{figure}[ht]
+\begin{center}
+\includegraphics[width=\textwidth]{Insurance/KaggleDesc.png}
+\caption{Screen shot from Kaggle.}
+\label{KaggleDesc}
+\end{center}
+\end{figure}
+
+\newpage
+The full training set can be downloaded from their site. We will work with
+a reduced version, consisting of 5000 observations, each with 76 predictor
+values. Sixty-two of these predictors are categorical, while the remaining
+14 can be treated as continuous.
+
+This data can be read in using
+
+\large
+\vspace{-.4in}
+\begin{verbatim}
+> insdat = read.table(
+  "http://www.stat.cmu.edu/~cschafer/MSCF/Allstatesub.txt", 
+  sep=",", header=T)
+\end{verbatim}
+\Large
+
+By looking at {\tt names(insdat)}, one can see that the predictors have been
+given generic names to protect the intellectual property of Allstate.
+The final column, named {\tt loss}, is the response.
+
+Our objective at this point is to learn some more advanced R syntax for
+dealing with cases when there are a large number of predictors.
+
+\newpage
+Consider the R code below.
+
+\vspace{-.4in}
+\large
+\begin{verbatim}
+fulllm = lm(loss ~ ., data=insdat)
+
+predlist = attributes(terms(formula(fulllm)))$term.labels
+
+pvalue = numeric(length(predlist))
+
+for(i in 1:length(predlist))
+{
+   holdout = drop1(fulllm, predlist[i], test="F")
+   pvalue[i] = holdout$`Pr(>F)`[2]
+}
+
+cbind(predlist, signif(pvalue))
+\end{verbatim}
+\Large
+
+\textcolor{qcol}{{\bf Exercise:} Go through the above code
+line-by-line to explore and understand the R syntax.}
+
+\answerlines{27}
+
+
+\end{document}
+
+
+\newpage
+\makerule
+{\bf \LARGE Box-Cox Transformation}
+
+We earlier discussed the value of {\bf transforming the response}
+for improving the fit of the model. This was particularly helpful
+in certain cases of heteroskedasticity.
+
+The {\bf Box-Cox Transformation} makes the choice of transformation
+into a more formal process. 
+
+This is {\bf only} useful in the case where the response is {\bf strictly
+positive}.
+
+First, we define Box-Cox {\bf power transformation} function:
+\[
+   y^{(\lambda)} = \left\{
+   \begin{array}{ll}
+   \frac{y^{\lambda}-1}{\lambda} & \mbox{if $\lambda \neq 0$} \\
+   \log(y) & \mbox{if $\lambda = 0$}
+   \end{array}
+   \right.
+\]
+
+This defines a wide range of possible transformations for the response, including
+$\sqrt{y}$, $y^2$, $\log(y)$, $1/\sqrt{y}$, and so forth. Also, note that this
+is a continuous function of $\lambda$.
+
+\newpage
+Now we put forth the model
+\[
+   Y^{(\lambda)} = \beta_0 + \sum_{j=1}^p \beta_j x_j + \epsilon
+\]
+and then ask: What choice of $\lambda$ yields the best fitting
+model?
+
+Through a maximum likelihood procedure, the best $\lambda$ can be found,
+and then this choice is used to transform the response prior to
+fitting the full regression model.
+
+Typically, a confidence interval is formed for $\lambda$, and then
+a ``nice'' value is chosen from this interval to serve as the
+transformation. Examples of ``nice'' values include -1, -0.5, 0, 0.5, 1,
+and so forth.
+
+\newpage
+This is implemented in R via the function {\tt boxCox()}, which is part
+of the package {\tt car}.
+
+When discussing simple linear regression, we considered an example involving
+the prediction of the
+realized volatility from the log total volume. It was found that a model
+fit to the log-transformed response was a good choice.
+
+See Figure \ref{model3volexample} for the fit in that case, along with the
+plot of residuals versus fitted values.
+
+\newpage
+\vspace{-.7in}
+\begin{figure}[ht!]
+\begin{center}
+\includegraphics[width=4.0in]{model3volexample.eps}
+\vspace{-.3in}
+\caption{The model fit to realized volatility after taking the
+log transform. The upper
+plot shows the scatter plot with the regression line superimposed,
+the lower plot shows the plot of residuals versus fitted values.}
+\label{model3volexample}
+\end{center}
+\end{figure}
+
+
+Let's now try the Box-Cox procedure on this example.
+
+Assume that the response is stored {\tt realizedvol} and the predictor is
+{\tt logvolume}. Then, the command is simply
+
+%print(powerTransform(holdvar ~ holdvol))
+%> 
+%> transresp = bcPower(holdvar, 0.11)
+
+%\Rcode{> powerTransform(realizedvol $\sim$ logvolume)}
+
+\Rcode{> boxCox(realizedvol $\sim$ logvolume)}
+
+This creates the plot shown as Figure \ref{boxcox}.
+
+\vspace{-.4in}
+\begin{figure}[ht]
+\begin{center}
+\includegraphics[width=4in]{boxcox.eps}
+\vspace{-.2in}
+\caption{The output of {\tt boxCox()}, when applied to the simple realized volatility
+example.}
+\label{boxcox}
+\end{center}
+\end{figure}
+
+\newpage
+\textcolor{qcol}{{\bf Exercise:} Was the log transform a good choice?}
+
+\answerlines{3}
+
+\vspace{-.3in}
+We see that the optimal choice is $\lambda \approx 0.1$.
+
+This can then be applied to the data using the function {\tt bcPower()}:
+
+\Rcode{> transrealizedvol = bcPower(realizedvol, 0.1)}
+
+\newpage
+
+{\bf The Yeo-Johnson Transformation}
+
+The Box-Cox Transformation suffers from the limitation that it can
+only be applied to strictly positive variables. A generalization
+that works for any variable is the {\bf Yeo-Johnson Transformation}.
+
+The Yeo-Johnson Power Transformation is
+\[
+   y^{(\lambda,\mbox{\small YJ})} 
+   =
+   \left\{
+   \begin{array}{ll}
+   \left(\left(y+1\right)^{\lambda}-1\right)/\lambda, & \mbox{if $\lambda \neq 0, y \geq 0$} \\
+   \log\!\left(y + 1\right), & \mbox{if $\lambda = 0, y \geq 0$} \\
+   - \left[\left(-y + 1\right)^{2-\lambda} -1  \right]/\left(2-\lambda\right), & \mbox{if $\lambda \neq 2, y < 0$} \\
+   - \log\!\left(-y + 1\right),  & \mbox{if $\lambda = 2, y < 0$}
+   \end{array}
+   \right.
+\]
+
+It appears somewhat messy, but the intention is much like for the Box-Cox Transformation:
+As $\lambda$ varies, we get a wide range of power and log transformations of the data;
+the optimal transformation can be sought via maximum likelihood.
+
+In R, this can be implemented using {\tt boxCox()}, but with the additional argument
+{\tt family = "yjPower"}. To apply the transformation, use the function {\tt yjPower()}.
+
+\newpage
+\makerule
+{\bf \LARGE Robust Regression}
+
+In the least squares approach to regression, we seek the
+$\boldbeta$ that minimizes the residual sum of squares
+\[
+   \sum_{i=1}^n \left(y_i - {\bf x}_i^T\!\boldbeta\right)^2.
+\]
+Of course, this is equivalent to minimizing
+\[
+   \frac{1}{\sigma^2} \sum_{i=1}^n \left(y_i - {\bf x}_i^T\!\boldbeta\right)^2
+   =
+   \sum_{i=1}^n \left(\frac{y_i - {\bf x}_i^T\!\boldbeta}{\sigma}\right)^{\!2}
+   = 
+   \sum_{i=1}^n \rho\!\left(\frac{y_i - {\bf x}_i^T\!\boldbeta}{\sigma}\right)
+\]
+where $\rho(x) = x^2$.
+
+The general concern with $\rho(x) = x^2$ is that it may place too much weight
+on extreme observations: Think about how quickly the function $x^2$ increases
+as $|x|$ increases.
+
+The choice $\rho(x) = x^2$ may be optimal when the errors are normal, but
+it is not very {\bf robust} to deviations from this assumption.
+
+If we generated errors from the $t$ distribution with four degrees of freedom,
+for instance, we are likely to see a few extreme errors. These observations
+would have a large influence on the fit of the model, if we proceeded with
+$\rho(x) = x^2$.
+
+\newpage
+There are many possible choices for $\rho$, but here we will focus on
+a popular one, the {\bf Huber loss function}, which is defined as
+\[
+   \rho_{\mbox{\tiny Hub}}(x) = \left\{
+   \begin{array}{ll}
+   x^2 & \mbox{if $|x| < k$} \\
+   k(2|x| -k) & \mbox{otherwise} \\
+   \end{array}
+   \right.
+\]
+where $k >0$ is set by the user. For technical reasons, the
+default choice is $k = 1.345$.
+
+Figure \ref{rhos} compares squared error loss with the Huber
+loss function.
+
+\begin{figure}[ht]
+\begin{center}
+\includegraphics[width=5.0in]{Robust/rhos.eps}
+\vspace{-.2in}
+\caption{A comparison of the squared error loss function and the
+Huber loss function.}
+\label{rhos}
+\end{center}
+\end{figure}
+
+\newpage
+\textcolor{qcol}{{\bf Exercise:} What is the effect of varying $k$ in
+the Huber loss function?}
+
+\answerlines{18}
+
+\newpage
+{\bf Simulated Example}
+
+In this example, the truth is that $\beta_0 = 1$ and $\beta_1 = 10$.
+The sample size is $n=100$. The error has the $t$ distribution with
+a single degree of freedom, so there is great potential for extreme
+observations.
+
+Figure \ref{robustsims} shows two simulated
+data sets under these conditions, each with the true line (solid),
+the regression line estimated using least squares (dashed), and
+the regression line estimated using the Huber loss (dashed-dot).
+
+\vspace{.5in}
+\begin{figure}[ht]
+\begin{center}
+\includegraphics[width=\textwidth]{Robust/robustsims.eps}
+\vspace{-.2in}
+\caption{Comparing the performance of the squared error loss and the
+Huber loss on a simulated regression problem where the error has
+the $t$-distribution with a single degree of freedom.}
+\label{robustsims}
+\end{center}
+\end{figure}
+
+\newpage
+
+It is clear that in both instances that the Huber loss function
+effectively downweights the extreme observations, and, as a result,
+results in a closer approximation to the truth.
+
+These examples are, admittedly, chosen to be extreme to illustrate
+the point. Nevertheless, robust regression is useful in situations
+where it is suspected that the error distribution is not normal,
+and there is concern over extreme observations.
+
+\newpage
+Robust regression is implemented in R using the function {\tt rlm()},
+which is part of the {\tt MASS} package.
+
+The default setting in {\tt rlm()} is to use the Huber loss function
+with $k=1.345$. Otherwise, the command is used much like {\tt lm()}:
+
+\Rcode{> holdrlm = rlm(PNCexret $\sim$ Mkt.RF + SMB + HML,\\
+\textcolor{white}{xxxx}data=ffhold)}
+
+The result of this fit is shown below. As is the case in many situations,
+the difference relative to the fit with squared error loss is negligible.
+
+\normalsize
+\begin{verbatim}
+Coefficients:
+            Value   Std. Error t value
+(Intercept) -0.1665  0.0641    -2.5991
+Mkt.RF       1.2175  0.0641    18.9866
+SMB         -0.0600  0.1281    -0.4681
+HML          0.7500  0.1101     6.8112
+
+Residual standard error: 0.7206 on 121 degrees of freedom
+\end{verbatim}
+\Large
+
+If you want to use the Huber loss, but choose a different value for
+$k$, then the syntax is
+
+\Rcode{> holdrlm = rlm(PNCexret $\sim$ Mkt.RF + SMB + HML,\\
+\textcolor{white}{xxxx} k=0.5, data=ffhold)}
+
+%See page 3 in http://www.stats.ox.ac.uk/pub/StatMeth/Robust.pdf
+%Focus on Huber, rlm()
+
+\newpage
+\makerule
+{\bf \LARGE Prediction Intervals}
+
+Recall our discussion of {\bf prediction intervals} within the
+context of simple linear regression.
+
+Here we will rely on R to create the prediction intervals for us.
+Fortunately, this is simple using the command {\tt predict()}.
+
+If I simply use
+
+\Rcode{> predict(ff3modPNC)}
+
+\vspace{-.4in}
+I will get back the fitted values for the model, i.e.~the prediction
+is made for each of the {\bf x} that were used in the model.
+
+We are generally more interested in making predictions for {\bf new}
+or {\bf future} {\bf x}. We used the notation ${\bf x}^*$ for this
+previously.
+
+We use the {\tt newdata} argument to {\tt predict()} to make
+such a prediction. The trick here is that what is passed to {\tt newdata}
+must be a data frame with variables of the same name as was used
+in fitting the model.
+
+\newpage
+Suppose we want to predict the excess market return for PNC when
+the excess market return is 0.01, the ``Small minus Big'' equals
+0.1, and the ``High minus Low'' equals 0.3.
+
+The syntax I would use is as follows
+
+\Rcode{> predict(ff3modPNC, \\
+\textcolor{white}{xx} newdata=data.frame(Mkt.RF=0.01, SMB=0.1, HML=0.3),\\
+\textcolor{white}{xx} interval="prediction")}
+
+Note that I included {\tt interval="prediction"} so that the output will include
+the 95\% prediction interval for the new observation. If you want to change the
+level, use the argument {\tt level} to the function.
+
+The output appears as follows
+
+\vspace{-.5in}
+\begin{verbatim}
+         fit       lwr      upr
+1 0.08139874 -1.462155 1.624953
+\end{verbatim}
+
+So, a 95\% prediction interval for the response in this case is found to be
+$(-1.46, 1.62)$.
+
+We could construct a data frame with multiple rows of data, and construct
+prediction intervals for all of those ``new'' observations simultaneously.
+
+\end{document}
+
+
+\newpage
+
+{\bf Mallows' $C_p$}
+
+To define this, first consider the most complicated model
+under consideration, i.e., the one with the most parameters.
+Let $\widehat \sigma^2_{\mbox{\small LARGE}}$ denote the estimate of
+$\sigma^2$ that arises from this model.
+
+We will compare this ``largest'' model with a simpler model
+consisting of $p$ parameters in the linear predictor.
+The residual sum of squares for this model is
+${\rm RSS}_{\mbox{\small SMALL}}$.
+
+Then,
+\[
+   C_p = 
+\left[\frac{{\rm RSS}_{\mbox{\small SMALL}}}{\widehat \sigma^2_{\mbox{\small LARGE}}}\right]
+   + 2p - n
+   = 
+\left[\frac{\left(n-p\right)\!\widehat \sigma^2_{\mbox{\small SMALL}}}{\widehat \sigma^2_{\mbox{\small LARGE}}}\right]
+   + 2p - n
+\]
+
+\textcolor{qcol}{{\bf Exercise:} Explain why if the ``smaller'' model is correct, then $C_p \approx p$.}
+
+\answerlines{7}
+
